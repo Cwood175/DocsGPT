@@ -51,6 +51,7 @@ class ReadWebpageTool(Tool):
         except requests.exceptions.RequestException as e:
             return f"Error fetching URL {url}: {e}"
         except Exception as e:
+            logger.error(f"Error processing URL {url}: {e}")
             return f"Error processing URL {url}: {e}"
 
     def get_actions_metadata(self):

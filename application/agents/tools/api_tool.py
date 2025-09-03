@@ -28,7 +28,7 @@ class APITool(Tool):
         # if isinstance(body, dict):
         #     body = json.dumps(body)
         try:
-            print(f"Making API call: {method} {url} with body: {body}")
+            print(f"Making API call: {method} {url} with body: {body!r}")
             if body == "{}":
                 body = None
             response = requests.request(method, url, headers=headers, data=body)

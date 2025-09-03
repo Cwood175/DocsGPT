@@ -97,8 +97,8 @@ class StreamResource(Resource, BaseAnswerResource):
         except ValueError as e:
             message = "Malformed request body"
             logger.error(
-                f"/stream - error: {message} - specific error: {str(e)} - traceback: {traceback.format_exc()}",
-                extra={"error": str(e), "traceback": traceback.format_exc()},
+                f"/stream - error: {message} - specific error: {e} - traceback: {traceback.format_exc()}",
+                extra={"error": e, "traceback": traceback.format_exc()},
             )
             return Response(
                 self.error_stream_generate(message),
@@ -107,8 +107,8 @@ class StreamResource(Resource, BaseAnswerResource):
             )
         except Exception as e:
             logger.error(
-                f"/stream - error: {str(e)} - traceback: {traceback.format_exc()}",
-                extra={"error": str(e), "traceback": traceback.format_exc()},
+                f"/stream - error: {e} - traceback: {traceback.format_exc()}",
+                extra={"error": e, "traceback": traceback.format_exc()},
             )
             return Response(
                 self.error_stream_generate("Unknown error occurred"),

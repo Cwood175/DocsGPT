@@ -39,7 +39,7 @@ def get_prompt(prompt_id: str, prompts_collection=None) -> str:
             with open(file_path, "r") as f:
                 return f.read()
         except FileNotFoundError:
-            raise FileNotFoundError(f"Prompt file not found: {file_path}")
+            raise FileNotFoundError(f"Prompt file not found: {file_path!r}")
     try:
         if prompts_collection is None:
             mongo = MongoDB.get_client()
@@ -47,10 +47,10 @@ def get_prompt(prompt_id: str, prompts_collection=None) -> str:
             prompts_collection = db["prompts"]
         prompt_doc = prompts_collection.find_one({"_id": ObjectId(prompt_id)})
         if not prompt_doc:
-            raise ValueError(f"Prompt with ID {prompt_id} not found")
+            raise ValueError(f"Prompt with ID {prompt_id!r} not found")
         return prompt_doc["content"]
     except Exception as e:
-        raise ValueError(f"Invalid prompt ID: {prompt_id}") from e
+        raise ValueError(f"Invalid prompt ID: {prompt_id!r}") from e
 
 
 class StreamProcessor:
@@ -131,7 +131,7 @@ class StreamProcessor:
                     attachments.append(attachment_doc)
             except Exception as e:
                 logger.error(
-                    f"Error retrieving attachment {attachment_id}: {e}", exc_info=True
+                    "Error retrieving attachment %s: %s", attachment_id, e, exc_info=True
                 )
         return attachments
 
@@ -161,13 +161,13 @@ class StreamProcessor:
                 )
             return str(agent["key"]), not is_owner, agent.get("shared_token")
         except Exception as e:
-            logger.error(f"Error in get_agent_key: {str(e)}", exc_info=True)
+            logger.error("Error in get_agent_key: %s", str(e), exc_info=True)
             raise
 
     def _get_data_from_api_key(self, api_key: str) -> Dict[str, Any]:
         data = self.agents_collection.find_one({"key": api_key})
         if not data:
-            raise Exception("Invalid API Key, please generate a new key", 401)
+            raise InvalidApiKeyError("Invalid API Key, please generate a new key")
         source = data.get("source")
         if isinstance(source, DBRef):
             source_doc = self.db.dereference(source)
@@ -198,7 +198,7 @@ class StreamProcessor:
             )
             self.initial_user_id = data_key.get("user")
             self.decoded_token = {"sub": data_key.get("user")}
-            if data_key.get("source"):
+            if "source" in data_key:
                 self.source = {"active_docs": data_key["source"]}
             if data_key.get("retriever"):
                 self.retriever_config["retriever_name"] = data_key["retriever"]
@@ -219,7 +219,7 @@ class StreamProcessor:
                 if self.is_shared_usage
                 else {"sub": data_key.get("user")}
             )
-            if data_key.get("source"):
+            if "source" in data_key:
                 self.source = {"active_docs": data_key["source"]}
             if data_key.get("retriever"):
                 self.retriever_config["retriever_name"] = data_key["retriever"]

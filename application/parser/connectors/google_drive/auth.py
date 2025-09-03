@@ -1,6 +1,6 @@
-import logging
 import datetime
-from typing import Optional, Dict, Any
+import logging
+from typing import Any, Dict, Optional
 
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -16,10 +16,10 @@ class GoogleDriveAuth(BaseConnectorAuth):
     Handles Google OAuth 2.0 authentication for Google Drive access.
     """
     
-    SCOPES = [
+    SCOPES = (
         'https://www.googleapis.com/auth/drive.readonly',
         'https://www.googleapis.com/auth/drive.metadata.readonly'
-    ]
+    )
     
     def __init__(self):
         self.client_id = settings.GOOGLE_CLIENT_ID
@@ -57,7 +57,7 @@ class GoogleDriveAuth(BaseConnectorAuth):
             return authorization_url
             
         except Exception as e:
-            logging.error(f"Error generating authorization URL: {e}")
+            logging.error(f"Error generating authorization URL: {e}", exc_info=True)
             raise
     
     def exchange_code_for_tokens(self, authorization_code: str) -> Dict[str, Any]:
@@ -113,7 +113,7 @@ class GoogleDriveAuth(BaseConnectorAuth):
             }
 
         except Exception as e:
-            logging.error(f"Error exchanging code for tokens: {e}")
+            logging.error(f"Error exchanging code for tokens: {e}", exc_info=True)
             raise
     
     def refresh_access_token(self, refresh_token: str) -> Dict[str, Any]:
@@ -142,7 +142,7 @@ class GoogleDriveAuth(BaseConnectorAuth):
                 'expiry': credentials.expiry.isoformat() if credentials.expiry else None
             }
         except Exception as e:
-            logging.error(f"Error refreshing access token: {e}", exc_info=True)
+            logging.error(f"Error refreshing access token: {e}")
             raise
     
     def create_credentials_from_token_info(self, token_info: Dict[str, Any]) -> Credentials:
@@ -190,7 +190,7 @@ class GoogleDriveAuth(BaseConnectorAuth):
         except HttpError as e:
             raise ValueError(f"Failed to build Google Drive service: HTTP {e.resp.status}")
         except Exception as e:
-            raise ValueError(f"Failed to build Google Drive service: {str(e)}")
+            raise ValueError(f"Failed to build Google Drive service: {str(e)}", exc_info=True)
         
     def is_token_expired(self, token_info):
         if 'expiry' in token_info and token_info['expiry']:
@@ -200,7 +200,8 @@ class GoogleDriveAuth(BaseConnectorAuth):
                 expiry_dt = parser.parse(token_info['expiry'])
                 current_time = datetime.datetime.now(datetime.timezone.utc)
                 return current_time >= expiry_dt - datetime.timedelta(seconds=60)
-            except Exception:
+            except Exception as e:
+                logging.error(f"Error parsing token expiry: {e}", exc_info=True)
                 return True
 
         if 'access_token' in token_info and token_info['access_token']:
@@ -243,7 +244,7 @@ class GoogleDriveAuth(BaseConnectorAuth):
             return token_info
 
         except Exception as e:
-            raise ValueError(f"Failed to retrieve Google Drive token information: {str(e)}")
+            raise ValueError(f"Failed to retrieve Google Drive token information: {str(e)}", exc_info=True)
 
     def validate_credentials(self, credentials: Credentials) -> bool:
         """
@@ -264,5 +265,5 @@ class GoogleDriveAuth(BaseConnectorAuth):
             logging.error(f"HTTP error validating credentials: {e}")
             return False
         except Exception as e:
-            logging.error(f"Error validating credentials: {e}")
+            logging.error(f"Error validating credentials: {e}", exc_info=True)
             return False

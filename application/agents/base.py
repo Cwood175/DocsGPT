@@ -142,7 +142,7 @@ class BaseAgent(ABC):
         tool_id, action_name, call_args = parser.parse_args(call)
 
         call_id = getattr(call, "id", None) or str(uuid.uuid4())
-        
+
         # Check if parsing failed
         if tool_id is None or action_name is None:
             error_message = f"Error: Failed to parse LLM tool call. Tool name: {getattr(call, 'name', 'unknown')}"
@@ -230,11 +230,11 @@ class BaseAgent(ABC):
         )
         if tool_data["name"] == "api_tool":
             print(
-                f"Executing api: {action_name} with query_params: {query_params}, headers: {headers}, body: {body}"
+                "Executing api: {} with query_params: {}, headers: {}, body: {}".format(action_name, query_params, headers, body)
             )
             result = tool.execute_action(action_name, **body)
         else:
-            print(f"Executing tool: {action_name} with args: {call_args}")
+            print("Executing tool: {} with args: {}".format(action_name, call_args))
             result = tool.execute_action(action_name, **parameters)
         tool_call_data["result"] = (
             f"{str(result)[:50]}..." if len(str(result)) > 50 else result
@@ -263,8 +263,10 @@ class BaseAgent(ABC):
         self,
         system_prompt: str,
         query: str,
-        retrieved_data: List[Dict],
+        retrieved_data: Optional[List[Dict]] = None,
     ) -> List[Dict]:
+        if retrieved_data is None:
+            retrieved_data = []
         docs_together = "\n".join([doc["text"] for doc in retrieved_data])
         p_chat_combine = system_prompt.replace("{summaries}", docs_together)
         messages_combine = [{"role": "system", "content": p_chat_combine}]

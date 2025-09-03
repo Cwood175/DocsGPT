@@ -41,9 +41,9 @@ class Settings(BaseSettings):
     FALLBACK_LLM_API_KEY: Optional[str] = None  # api key for fallback llm
 
     # Google Drive integration
-    GOOGLE_CLIENT_ID: Optional[str] = None # Replace with your actual Google OAuth client ID
-    GOOGLE_CLIENT_SECRET: Optional[str] = None# Replace with your actual Google OAuth client secret
-    CONNECTOR_REDIRECT_BASE_URI: Optional[str] = "http://127.0.0.1:7091/api/connectors/callback" 
+    GOOGLE_CLIENT_ID: Optional[str] = None  # Replace with your actual Google OAuth client ID
+    GOOGLE_CLIENT_SECRET: Optional[str] = None  # Replace with your actual Google OAuth client secret
+    CONNECTOR_REDIRECT_BASE_URI: Optional[str] = "http://127.0.0.1:7091/api/connectors/callback"
     ##append ?provider={provider_name} in your Provider console like http://127.0.0.1:7091/api/connectors/callback?provider=google_drive
 
 
@@ -96,7 +96,7 @@ class Settings(BaseSettings):
     QDRANT_HOST: Optional[str] = None
     QDRANT_PATH: Optional[str] = None
     QDRANT_DISTANCE_FUNC: str = "Cosine"
-    
+
     # PGVector vectorstore config
     PGVECTOR_CONNECTION_STRING: Optional[str] = None
     # Milvus vectorstore config

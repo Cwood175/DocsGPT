@@ -114,9 +114,6 @@ class AnswerResource(Resource, BaseAnswerResource):
             if structured_info:
                 result.update(structured_info)
         except Exception as e:
-            logger.error(
-                f"/api/answer - error: {str(e)} - traceback: {traceback.format_exc()}",
-                extra={"error": str(e), "traceback": traceback.format_exc()},
-            )
+            logger.error(f"/api/answer - error: {e}", exc_info=e)
             return make_response({"error": str(e)}, 500)
         return make_response(result, 200)

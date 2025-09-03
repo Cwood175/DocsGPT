@@ -7,7 +7,6 @@ from flask import Response
 from flask_restx import Namespace
 
 from application.api.answer.services.conversation_service import ConversationService
-
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
 from application.llm.llm_creator import LLMCreator
@@ -192,7 +191,7 @@ class BaseAnswerResource:
             data = json.dumps({"type": "end"})
             yield f"data: {data}\n\n"
         except Exception as e:
-            logger.error(f"Error in stream: {str(e)}", exc_info=True)
+            logger.exception("Error in stream")
             data = json.dumps(
                 {
                     "type": "error",
@@ -259,5 +258,6 @@ class BaseAnswerResource:
         return result
 
     def error_stream_generate(self, err_response):
-        data = json.dumps({"type": "error", "error": err_response})
+        logger.exception("Error in stream generation")
+        data = json.dumps({"type": "error", "error": str(err_response)})
         yield f"data: {data}\n\n"

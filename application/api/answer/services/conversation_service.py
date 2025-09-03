@@ -3,7 +3,6 @@ from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
 from application.core.mongo_db import MongoDB
-
 from application.core.settings import settings
 from bson import ObjectId
 
@@ -37,10 +36,10 @@ class ConversationService:
                     f"Conversation not found or unauthorized - ID: {conversation_id}, User: {user_id}"
                 )
                 return None
-            conversation["_id"] = str(conversation["_id"])
+            conversation["_id"] = f"{conversation['_id']}"
             return conversation
         except Exception as e:
-            logger.error(f"Error fetching conversation: {str(e)}", exc_info=True)
+            logger.error(f"Error fetching conversation: {e}")
             return None
 
     def save_conversation(
@@ -140,9 +139,7 @@ class ConversationService:
                 },
                 {
                     "role": "user",
-                    "content": "Summarise following conversation in no more than 3 words, "
-                    "respond ONLY with the summary, use the same language as the "
-                    "user query \n\nUser: " + question + "\n\n" + "AI: " + response,
+                    "content": f"Summarise following conversation in no more than 3 words, respond ONLY with the summary, use the same language as the user query \n\nUser: {question}\n\nAI: {response}",
                 },
             ]
 
@@ -177,4 +174,4 @@ class ConversationService:
                 if agent:
                     conversation_data["api_key"] = agent["key"]
             result = self.conversations_collection.insert_one(conversation_data)
-            return str(result.inserted_id)
+            return f"{result.inserted_id}"

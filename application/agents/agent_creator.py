@@ -3,10 +3,11 @@ from application.agents.react_agent import ReActAgent
 
 
 class AgentCreator:
-    agents = {
-        "classic": ClassicAgent,
-        "react": ReActAgent,
-    }
+    def __init__(self):
+        self.agents = {
+            "classic": ClassicAgent,
+            "react": ReActAgent,
+        }
 
     @classmethod
     def create_agent(cls, type, *args, **kwargs):

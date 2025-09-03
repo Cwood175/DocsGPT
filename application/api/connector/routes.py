@@ -282,7 +282,7 @@ class ConnectorsCallback(Resource):
                     user_info = service.about().get(fields="user").execute()
                     user_email = user_info.get('user', {}).get('emailAddress', 'Connected User')
                 except Exception as e:
-                    current_app.logger.warning(f"Could not get user info: {e}")
+                    current_app.logger.warning("Could not get user info", exc_info=True)
                     user_email = 'Connected User'
 
                 sanitized_token_info = {
@@ -307,11 +307,11 @@ class ConnectorsCallback(Resource):
                 return redirect(f"/api/connectors/callback-status?status=success&message=Authentication+successful&provider={provider}&session_token={session_token}&user_email={user_email}")
 
             except Exception as e:
-                current_app.logger.error(f"Error exchanging code for tokens: {str(e)}", exc_info=True)
+                current_app.logger.error("Error exchanging code for tokens", exc_info=True)
                 return redirect(f"/api/connectors/callback-status?status=error&message=Failed+to+exchange+authorization+code+for+tokens:+{str(e)}&provider={provider}")
 
         except Exception as e:
-            current_app.logger.error(f"Error handling connector callback: {e}")
+            current_app.logger.error("Error handling connector callback", exc_info=True)
             return redirect(f"/api/connectors/callback-status?status=error&message=Failed+to+complete+connector+authentication:+{str(e)}.+Please+try+again+and+make+sure+to+grant+all+requested+permissions,+including+offline+access.")
 
 
@@ -332,7 +332,7 @@ class ConnectorRefresh(Resource):
             token_info = auth.refresh_access_token(refresh_token)
             return make_response(jsonify({"success": True, "token_info": token_info}), 200)
         except Exception as e:
-            current_app.logger.error(f"Error refreshing token for connector: {e}")
+            current_app.logger.error("Error refreshing token for connector", exc_info=True)
             return make_response(jsonify({"success": False, "error": str(e)}), 500)
 
 
@@ -380,7 +380,7 @@ class ConnectorFiles(Resource):
 
             return make_response(jsonify({"success": True, "files": files, "total": len(files)}), 200)
         except Exception as e:
-            current_app.logger.error(f"Error loading connector files: {e}")
+            current_app.logger.error("Error loading connector files", exc_info=True)
             return make_response(jsonify({"success": False, "error": f"Failed to load files: {str(e)}"}), 500)
 
 
@@ -416,7 +416,7 @@ class ConnectorValidateSession(Resource):
                 "user_email": session.get('user_email', 'Connected User')
             }), 200)
         except Exception as e:
-            current_app.logger.error(f"Error validating connector session: {e}")
+            current_app.logger.error("Error validating connector session", exc_info=True)
             return make_response(jsonify({"success": False, "error": str(e)}), 500)
 
 
@@ -438,7 +438,7 @@ class ConnectorDisconnect(Resource):
             
             return make_response(jsonify({"success": True}), 200)
         except Exception as e:
-            current_app.logger.error(f"Error disconnecting connector session: {e}")
+            current_app.logger.error("Error disconnecting connector session", exc_info=True)
             return make_response(jsonify({"success": False, "error": str(e)}), 500)
 
 
@@ -539,7 +539,7 @@ class ConnectorSync(Resource):
 
         except Exception as err:
             current_app.logger.error(
-                f"Error syncing connector source: {err}",
+                "Error syncing connector source",
                 exc_info=True
             )
             return make_response(
@@ -607,7 +607,7 @@ class ConnectorCallbackStatus(Resource):
             
             return make_response(html_content, 200, {'Content-Type': 'text/html'})
         except Exception as e:
-            current_app.logger.error(f"Error rendering callback status page: {e}")
+            current_app.logger.error("Error rendering callback status page", exc_info=True)
             return make_response("Authentication error occurred", 500, {'Content-Type': 'text/html'})
 
 
