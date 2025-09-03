@@ -240,7 +240,7 @@ class OpenAILLM(BaseLLM):
             return result
 
         except Exception as e:
-            logging.error(f"Error preparing structured output format: {e}")
+            logger.error(f"Error preparing structured output format: {e}")
             return None
 
     def get_supported_attachment_types(self):

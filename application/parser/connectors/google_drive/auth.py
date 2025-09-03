@@ -1,6 +1,5 @@
-import logging
 import datetime
-from typing import Optional, Dict, Any
+import logging
 
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -9,6 +8,8 @@ from googleapiclient.errors import HttpError
 
 from application.core.settings import settings
 from application.parser.connectors.base import BaseConnectorAuth
+
+logger = logging.getLogger(__name__)
 
 
 class GoogleDriveAuth(BaseConnectorAuth):
@@ -31,7 +32,7 @@ class GoogleDriveAuth(BaseConnectorAuth):
 
 
 
-    def get_authorization_url(self, state: Optional[str] = None) -> str:
+    def get_authorization_url(self, state: str | None = None) -> str:
         try:
             flow = Flow.from_client_config(
                 {
@@ -57,7 +58,7 @@ class GoogleDriveAuth(BaseConnectorAuth):
             return authorization_url
             
         except Exception as e:
-            logging.error(f"Error generating authorization URL: {e}")
+            logger.error(f"Error generating authorization URL: {e}")
             raise
     
     def exchange_code_for_tokens(self, authorization_code: str) -> Dict[str, Any]:
@@ -84,7 +85,7 @@ class GoogleDriveAuth(BaseConnectorAuth):
             credentials = flow.credentials
 
             if not credentials.refresh_token:
-                logging.warning("OAuth flow did not return a refresh_token.")
+                logger.warning("OAuth flow did not return a refresh_token.")
             if not credentials.token:
                 raise ValueError("OAuth flow did not return an access token")
 
@@ -113,7 +114,7 @@ class GoogleDriveAuth(BaseConnectorAuth):
             }
 
         except Exception as e:
-            logging.error(f"Error exchanging code for tokens: {e}")
+            logger.error(f"Error exchanging code for tokens: {e}")
             raise
     
     def refresh_access_token(self, refresh_token: str) -> Dict[str, Any]:
@@ -142,7 +143,7 @@ class GoogleDriveAuth(BaseConnectorAuth):
                 'expiry': credentials.expiry.isoformat() if credentials.expiry else None
             }
         except Exception as e:
-            logging.error(f"Error refreshing access token: {e}", exc_info=True)
+            logger.exception("Error refreshing access token")
             raise
     
     def create_credentials_from_token_info(self, token_info: Dict[str, Any]) -> Credentials:
@@ -261,8 +262,8 @@ class GoogleDriveAuth(BaseConnectorAuth):
             return True
 
         except HttpError as e:
-            logging.error(f"HTTP error validating credentials: {e}")
+            logger.error(f"HTTP error validating credentials: {e}")
             return False
         except Exception as e:
-            logging.error(f"Error validating credentials: {e}")
+            logger.error(f"Error validating credentials: {e}")
             return False

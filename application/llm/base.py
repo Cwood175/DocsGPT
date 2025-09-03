@@ -2,7 +2,6 @@ import logging
 from abc import ABC, abstractmethod
 
 from application.cache import gen_cache, stream_cache
-
 from application.core.settings import settings
 from application.usage import gen_token_usage, stream_token_usage
 
@@ -39,8 +38,8 @@ class BaseLLM(ABC):
                     self.decoded_token,
                 )
             except Exception as e:
-                logger.error(
-                    f"Failed to initialize fallback LLM: {str(e)}", exc_info=True
+                logger.exception(
+                    f"Failed to initialize fallback LLM: {str(e)}"
                 )
         return self._fallback_llm
 
@@ -67,7 +66,7 @@ class BaseLLM(ABC):
             return decorated_method()
         except Exception as e:
             if not self.fallback_llm:
-                logger.error(f"Primary LLM failed and no fallback available: {str(e)}")
+                logger.exception(f"Primary LLM failed and no fallback available: {str(e)}")
                 raise
             logger.warning(
                 f"Falling back to {self.fallback_provider}/{self.fallback_model_name}. Error: {str(e)}"
@@ -132,7 +131,6 @@ class BaseLLM(ABC):
     def prepare_structured_output_format(self, json_schema):
         """Prepare structured output format specific to the LLM provider"""
         _ = json_schema
-        return None
 
     def get_supported_attachment_types(self):
         """
