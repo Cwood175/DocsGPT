@@ -1,5 +1,5 @@
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
@@ -22,7 +22,7 @@ def update_token_usage(decoded_token, user_api_key, token_usage):
         "api_key": user_api_key,
         "prompt_tokens": token_usage["prompt_tokens"],
         "generated_tokens": token_usage["generated_tokens"],
-        "timestamp": datetime.now(),
+        "timestamp": datetime.now(timezone.utc),
     }
     usage_collection.insert_one(usage_data)
 

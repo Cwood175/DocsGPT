@@ -2,9 +2,10 @@
 Contains parsers for presentation (.pptx) files to extract slide text.
 """
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any
 
 from application.parser.file.base_parser import BaseParser
+
 
 class PPTXParser(BaseParser):
     r"""PPTX (.pptx) parser for extracting text from PowerPoint slides.
@@ -30,18 +31,18 @@ class PPTXParser(BaseParser):
         self._concat_slides = concat_slides
         self._slide_separator = slide_separator
 
-    def _init_parser(self) -> Dict:
+    def _init_parser(self) -> dict:
         """Init parser."""
         return {}
 
-    def parse_file(self, file: Path, errors: str = "ignore") -> Union[str, List[str]]:
+    def parse_file(self, file: Path, errors: str = "ignore") -> str | list[str]:
         r"""
         Parse a .pptx file and extract text from each slide.
         Args:
             file (Path): Path to the .pptx file.
             errors (str): Error handling policy ('ignore' by default).
         Returns:
-            Union[str, List[str]]: Concatenated text if concat_slides is True,
+            str | list[str]: Concatenated text if concat_slides is True,
             otherwise a list of slide texts.
         """
 
@@ -50,26 +51,22 @@ class PPTXParser(BaseParser):
         except ImportError:
             raise ImportError("pptx module is required to read .PPTX files.")
 
-        try:
-            presentation = Presentation(file)
-            slide_texts=[]
+        presentation = Presentation(file)
+        slide_texts=[]
 
-            # Iterate over each slide in the presentation
-            for slide in presentation.slides:
-                slide_text=""
+        # Iterate over each slide in the presentation
+        for slide in presentation.slides:
+            slide_text=""
 
-                # Iterate over each shape in the slide
-                for shape in slide.shapes:
-                    # Check if the shape has a 'text' attribute and append that to the slide_text
-                    if hasattr(shape,"text"):
-                        slide_text+=shape.text
+            # Iterate over each shape in the slide
+            for shape in slide.shapes:
+                # Check if the shape has a 'text' attribute and append that to the slide_text
+                if hasattr(shape,"text"):
+                    slide_text+=shape.text
 
-                slide_texts.append(slide_text.strip())
+            slide_texts.append(slide_text.strip())
 
-            if self._concat_slides:
-                return self._slide_separator.join(slide_texts)
-            else:
-                return slide_texts
-
-        except Exception as e:
-            raise e
+        if self._concat_slides:
+            return self._slide_separator.join(slide_texts)
+        else:
+            return slide_texts

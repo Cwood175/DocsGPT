@@ -1,8 +1,10 @@
 import asyncio
-import websockets
-import json
 import base64
+import json
 from io import BytesIO
+
+import websockets
+
 from application.tts.base import BaseTTS
 
 
@@ -52,14 +54,20 @@ class ElevenlabsTTS(BaseTTS):
 
         await listen_task
     
+    @staticmethod
+    def _write_audio_file(path, data):
+        with open(path, "wb") as f:
+            f.write(data)
+
     async def stream(self, audio_stream):
         if self.write_audio:
             audio_bytes = BytesIO()
             async for chunk in audio_stream:
                 if chunk:
                     audio_bytes.write(chunk)
-            with open("output_audio.mp3", "wb") as f:
-                f.write(audio_bytes.getvalue())
+            await asyncio.to_thread(
+                self._write_audio_file, "output_audio.mp3", audio_bytes.getvalue()
+            )
         
         else:
             async for chunk in audio_stream:

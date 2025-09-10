@@ -5,9 +5,10 @@ from google import genai
 from google.genai import types
 
 from application.core.settings import settings
-
 from application.llm.base import BaseLLM
 from application.storage.storage_creator import StorageCreator
+
+logger = logging.getLogger(__name__)
 
 
 class GoogleLLM(BaseLLM):
@@ -77,14 +78,12 @@ class GoogleLLM(BaseLLM):
             if mime_type in self.get_supported_attachment_types():
                 try:
                     file_uri = self._upload_file_to_google(attachment)
-                    logging.info(
+                    logger.info(
                         f"GoogleLLM: Successfully uploaded file, got URI: {file_uri}"
                     )
                     files.append({"file_uri": file_uri, "mime_type": mime_type})
                 except Exception as e:
-                    logging.error(
-                        f"GoogleLLM: Error uploading file: {e}", exc_info=True
-                    )
+                    logger.exception(f"GoogleLLM: Error uploading file: {e}")
                     if "content" in attachment:
                         prepared_messages[user_message_index]["content"].append(
                             {
@@ -94,7 +93,7 @@ class GoogleLLM(BaseLLM):
                         )
 
         if files:
-            logging.info(f"GoogleLLM: Adding {len(files)} files to message")
+            logger.info(f"GoogleLLM: Adding {len(files)} files to message")
             prepared_messages[user_message_index]["content"].append({"files": files})
 
         return prepared_messages
@@ -139,7 +138,7 @@ class GoogleLLM(BaseLLM):
 
             return file_uri
         except Exception as e:
-            logging.error(f"Error uploading file to Google AI: {e}", exc_info=True)
+            logger.exception(f"Error uploading file to Google AI: {e}")
             raise
 
     def _clean_messages_google(self, messages):
@@ -201,10 +200,10 @@ class GoogleLLM(BaseLLM):
                 properties = parameters.get("properties", {})
 
                 if properties:
-                    genai_function = dict(
-                        name=function["name"],
-                        description=function["description"],
-                        parameters={
+                    genai_function = {
+                        "name": function["name"],
+                        "description": function["description"],
+                        "parameters": {
                             "type": "OBJECT",
                             "properties": {
                                 k: {
@@ -213,18 +212,14 @@ class GoogleLLM(BaseLLM):
                                 }
                                 for k, v in properties.items()
                             },
-                            "required": (
-                                parameters["required"]
-                                if "required" in parameters
-                                else []
-                            ),
+                            "required": parameters.get("required", []),
                         },
-                    )
+                    }
                 else:
-                    genai_function = dict(
-                        name=function["name"],
-                        description=function["description"],
-                    )
+                    genai_function = {
+                        "name": function["name"],
+                        "description": function["description"],
+                    }
 
                 genai_tool = types.Tool(function_declarations=[genai_function])
                 genai_tools.append(genai_tool)
@@ -308,7 +303,7 @@ class GoogleLLM(BaseLLM):
             if has_attachments:
                 break
 
-        logging.info(
+        logger.info(
             f"GoogleLLM: Starting stream generation. Model: {model}, Messages: {json.dumps(messages, default=str)}, Has attachments: {has_attachments}"
         )
 
@@ -399,8 +394,7 @@ class GoogleLLM(BaseLLM):
         try:
             return convert(json_schema)
         except Exception as e:
-            logging.error(
-                f"Error preparing structured output format for Google: {e}",
-                exc_info=True,
+            logger.exception(
+                f"Error preparing structured output format for Google: {e}"
             )
             return None

@@ -1,13 +1,13 @@
 import datetime
 import json
 import logging
-from typing import Any, Dict, Generator, List, Optional
+from collections.abc import Generator
+from typing import Any
 
 from flask import Response
 from flask_restx import Namespace
 
 from application.api.answer.services.conversation_service import ConversationService
-
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
 from application.llm.llm_creator import LLMCreator
@@ -30,8 +30,8 @@ class BaseAnswerResource:
         self.conversation_service = ConversationService()
 
     def validate_request(
-        self, data: Dict[str, Any], require_conversation_id: bool = False
-    ) -> Optional[Response]:
+        self, data: dict[str, Any], require_conversation_id: bool = False
+    ) -> Response | None:
         """Common request validation"""
         required_fields = ["question"]
         if require_conversation_id:
@@ -45,16 +45,16 @@ class BaseAnswerResource:
         question: str,
         agent: Any,
         retriever: Any,
-        conversation_id: Optional[str],
-        user_api_key: Optional[str],
-        decoded_token: Dict[str, Any],
+        conversation_id: str | None,
+        user_api_key: str | None,
+        decoded_token: dict[str, Any],
         isNoneDoc: bool = False,
-        index: Optional[int] = None,
+        index: int | None = None,
         should_save_conversation: bool = True,
-        attachment_ids: Optional[List[str]] = None,
-        agent_id: Optional[str] = None,
+        attachment_ids: list[str] | None = None,
+        agent_id: str | None = None,
         is_shared_usage: bool = False,
-        shared_token: Optional[str] = None,
+        shared_token: str | None = None,
     ) -> Generator[str, None, None]:
         """
         Generator function that streams the complete conversation response.
@@ -192,7 +192,7 @@ class BaseAnswerResource:
             data = json.dumps({"type": "end"})
             yield f"data: {data}\n\n"
         except Exception as e:
-            logger.error(f"Error in stream: {str(e)}", exc_info=True)
+            logger.exception(f"Error in stream: {e!s}")
             data = json.dumps(
                 {
                     "type": "error",
