@@ -1,7 +1,7 @@
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, Generator, List, Optional, Union
+import logging
+from typing import Any, Generator
 
 from application.logging import build_stack_data
 
@@ -14,11 +14,11 @@ class ToolCall:
 
     id: str
     name: str
-    arguments: Union[str, Dict]
-    index: Optional[int] = None
+    arguments: str | dict
+    index: int | None = None
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "ToolCall":
+    def from_dict(cls, data: dict) -> "ToolCall":
         """Create ToolCall from dictionary."""
         return cls(
             id=data.get("id", ""),
@@ -53,17 +53,17 @@ class LLMHandler(ABC):
     @abstractmethod
     def parse_response(self, response: Any) -> LLMResponse:
         """Parse raw LLM response into standardized format."""
-        pass
+        raise NotImplementedError
 
     @abstractmethod
-    def create_tool_message(self, tool_call: ToolCall, result: Any) -> Dict:
+    def create_tool_message(self, tool_call: ToolCall, result: Any) -> dict:
         """Create a tool result message for the conversation history."""
-        pass
+        raise NotImplementedError
 
     @abstractmethod
     def _iterate_stream(self, response: Any) -> Generator:
         """Iterate through streaming response chunks."""
-        pass
+        raise NotImplementedError
 
     def process_message_flow(
         self,
@@ -224,7 +224,7 @@ class LLMHandler(ABC):
                 updated_messages.append(self.create_tool_message(call, tool_response))
 
             except Exception as e:
-                logger.error(f"Error executing tool: {str(e)}", exc_info=True)
+                logger.exception(f"Error executing tool: {str(e)}")
                 updated_messages.append(
                     {
                         "role": "tool",

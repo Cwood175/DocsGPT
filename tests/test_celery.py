@@ -1,6 +1,6 @@
-from unittest.mock import patch
-from application.core.settings import settings
 from application.celery_init import make_celery
+from application.core.settings import settings
+from unittest.mock import patch
 
 
 @patch('application.celery_init.Celery')

@@ -1,6 +1,5 @@
-import logging
 import datetime
-from typing import Optional, Dict, Any
+import logging
 
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import Flow
@@ -9,6 +8,7 @@ from googleapiclient.errors import HttpError
 
 from application.core.settings import settings
 from application.parser.connectors.base import BaseConnectorAuth
+from typing import Any, Optional
 
 
 class GoogleDriveAuth(BaseConnectorAuth):
@@ -31,119 +31,105 @@ class GoogleDriveAuth(BaseConnectorAuth):
 
 
 
-    def get_authorization_url(self, state: Optional[str] = None) -> str:
-        try:
-            flow = Flow.from_client_config(
-                {
-                    "web": {
-                        "client_id": self.client_id,
-                        "client_secret": self.client_secret,
-                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                        "token_uri": "https://oauth2.googleapis.com/token",
-                        "redirect_uris": [self.redirect_uri]
-                    }
-                },
-                scopes=self.SCOPES
-            )
-            flow.redirect_uri = self.redirect_uri
-            
-            authorization_url, _ = flow.authorization_url(
-                access_type='offline',
-                prompt='consent',
-                include_granted_scopes='true',
-                state=state
-            )
-            
-            return authorization_url
-            
-        except Exception as e:
-            logging.error(f"Error generating authorization URL: {e}")
-            raise
+    def get_authorization_url(self, state: str | None = None) -> str:
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [self.redirect_uri]
+                }
+            },
+            scopes=self.SCOPES
+        )
+        flow.redirect_uri = self.redirect_uri
+        
+        authorization_url, _ = flow.authorization_url(
+            access_type='offline',
+            prompt='consent',
+            include_granted_scopes='true',
+            state=state
+        )
+        
+        return authorization_url
     
-    def exchange_code_for_tokens(self, authorization_code: str) -> Dict[str, Any]:
-        try:
-            if not authorization_code:
-                raise ValueError("Authorization code is required")
+    def exchange_code_for_tokens(self, authorization_code: str) -> dict[str, Any]:
+        if not authorization_code:
+            raise ValueError("Authorization code is required")
 
-            flow = Flow.from_client_config(
-                {
-                    "web": {
-                        "client_id": self.client_id,
-                        "client_secret": self.client_secret,
-                        "auth_uri": "https://accounts.google.com/o/oauth2/auth",
-                        "token_uri": "https://oauth2.googleapis.com/token",
-                        "redirect_uris": [self.redirect_uri]
-                    }
-                },
-                scopes=self.SCOPES
+        flow = Flow.from_client_config(
+            {
+                "web": {
+                    "client_id": self.client_id,
+                    "client_secret": self.client_secret,
+                    "auth_uri": "https://accounts.google.com/o/oauth2/auth",
+                    "token_uri": "https://oauth2.googleapis.com/token",
+                    "redirect_uris": [self.redirect_uri]
+                }
+            },
+            scopes=self.SCOPES
+        )
+        flow.redirect_uri = self.redirect_uri
+
+        flow.fetch_token(code=authorization_code)
+
+        credentials = flow.credentials
+
+        if not credentials.refresh_token:
+            logging.warning("OAuth flow did not return a refresh_token.")
+        if not credentials.token:
+            raise ValueError("OAuth flow did not return an access token")
+
+        if not credentials.token_uri:
+            credentials.token_uri = "https://oauth2.googleapis.com/token"
+
+        if not credentials.client_id:
+            credentials.client_id = self.client_id
+
+        if not credentials.client_secret:
+            credentials.client_secret = self.client_secret
+
+        if not credentials.refresh_token:
+            raise ValueError(
+                "No refresh token received. This typically happens when offline access wasn't granted. "
             )
-            flow.redirect_uri = self.redirect_uri
 
-            flow.fetch_token(code=authorization_code)
-
-            credentials = flow.credentials
-
-            if not credentials.refresh_token:
-                logging.warning("OAuth flow did not return a refresh_token.")
-            if not credentials.token:
-                raise ValueError("OAuth flow did not return an access token")
-
-            if not credentials.token_uri:
-                credentials.token_uri = "https://oauth2.googleapis.com/token"
-
-            if not credentials.client_id:
-                credentials.client_id = self.client_id
-
-            if not credentials.client_secret:
-                credentials.client_secret = self.client_secret
-
-            if not credentials.refresh_token:
-                raise ValueError(
-                    "No refresh token received. This typically happens when offline access wasn't granted. "
-                )
-
-            return {
-                'access_token': credentials.token,
-                'refresh_token': credentials.refresh_token,
-                'token_uri': credentials.token_uri,
-                'client_id': credentials.client_id,
-                'client_secret': credentials.client_secret,
-                'scopes': credentials.scopes,
-                'expiry': credentials.expiry.isoformat() if credentials.expiry else None
-            }
-
-        except Exception as e:
-            logging.error(f"Error exchanging code for tokens: {e}")
-            raise
+        return {
+            'access_token': credentials.token,
+            'refresh_token': credentials.refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes,
+            'expiry': credentials.expiry.isoformat() if credentials.expiry else None
+        }
     
-    def refresh_access_token(self, refresh_token: str) -> Dict[str, Any]:
-        try:
-            if not refresh_token:
-                raise ValueError("Refresh token is required")
+    def refresh_access_token(self, refresh_token: str) -> dict[str, Any]:
+        if not refresh_token:
+            raise ValueError("Refresh token is required")
 
-            credentials = Credentials(
-                token=None,
-                refresh_token=refresh_token,
-                token_uri="https://oauth2.googleapis.com/token",
-                client_id=self.client_id,
-                client_secret=self.client_secret
-            )
+        credentials = Credentials(
+            token=None,
+            refresh_token=refresh_token,
+            token_uri="https://oauth2.googleapis.com/token",
+            client_id=self.client_id,
+            client_secret=self.client_secret
+        )
 
-            from google.auth.transport.requests import Request
-            credentials.refresh(Request())
+        from google.auth.transport.requests import Request
+        credentials.refresh(Request())
 
-            return {
-                'access_token': credentials.token,
-                'refresh_token': refresh_token,
-                'token_uri': credentials.token_uri,
-                'client_id': credentials.client_id,
-                'client_secret': credentials.client_secret,
-                'scopes': credentials.scopes,
-                'expiry': credentials.expiry.isoformat() if credentials.expiry else None
-            }
-        except Exception as e:
-            logging.error(f"Error refreshing access token: {e}", exc_info=True)
-            raise
+        return {
+            'access_token': credentials.token,
+            'refresh_token': refresh_token,
+            'token_uri': credentials.token_uri,
+            'client_id': credentials.client_id,
+            'client_secret': credentials.client_secret,
+            'scopes': credentials.scopes,
+            'expiry': credentials.expiry.isoformat() if credentials.expiry else None
+        }
     
     def create_credentials_from_token_info(self, token_info: Dict[str, Any]) -> Credentials:
         from application.core.settings import settings
@@ -200,7 +186,7 @@ class GoogleDriveAuth(BaseConnectorAuth):
                 expiry_dt = parser.parse(token_info['expiry'])
                 current_time = datetime.datetime.now(datetime.timezone.utc)
                 return current_time >= expiry_dt - datetime.timedelta(seconds=60)
-            except Exception:
+            except (ValueError, TypeError):
                 return True
 
         if 'access_token' in token_info and token_info['access_token']:
@@ -208,42 +194,38 @@ class GoogleDriveAuth(BaseConnectorAuth):
 
         return True
     
-    def get_token_info_from_session(self, session_token: str) -> Dict[str, Any]:
-        try:
-            from application.core.mongo_db import MongoDB
-            from application.core.settings import settings
+    def get_token_info_from_session(self, session_token: str) -> dict[str, Any]:
+        from application.core.mongo_db import MongoDB
+        from application.core.settings import settings
 
-            mongo = MongoDB.get_client()
-            db = mongo[settings.MONGO_DB_NAME]
-            
-            sessions_collection = db["connector_sessions"]
-            session = sessions_collection.find_one({"session_token": session_token})   
-            if not session:
-                raise ValueError(f"Invalid session token: {session_token}")
+        mongo = MongoDB.get_client()
+        db = mongo[settings.MONGO_DB_NAME]
+        
+        sessions_collection = db["connector_sessions"]
+        session = sessions_collection.find_one({"session_token": session_token})   
+        if not session:
+            raise ValueError(f"Invalid session token: {session_token}")
 
-            if "token_info" not in session:
-                raise ValueError("Session missing token information")
+        if "token_info" not in session:
+            raise ValueError("Session missing token information")
 
-            token_info = session["token_info"]
-            if not token_info:
-                raise ValueError("Invalid token information")
+        token_info = session["token_info"]
+        if not token_info:
+            raise ValueError("Invalid token information")
 
-            required_fields = ["access_token", "refresh_token"]
-            missing_fields = [field for field in required_fields if field not in token_info or not token_info.get(field)]
-            if missing_fields:
-                raise ValueError(f"Missing required token fields: {missing_fields}")
+        required_fields = ["access_token", "refresh_token"]
+        missing_fields = [field for field in required_fields if field not in token_info or not token_info.get(field)]
+        if missing_fields:
+            raise ValueError(f"Missing required token fields: {missing_fields}")
 
-            if 'client_id' not in token_info:
-                token_info['client_id'] = settings.GOOGLE_CLIENT_ID
-            if 'client_secret' not in token_info:
-                token_info['client_secret'] = settings.GOOGLE_CLIENT_SECRET
-            if 'token_uri' not in token_info:
-                token_info['token_uri'] = 'https://oauth2.googleapis.com/token'
+        if 'client_id' not in token_info:
+            token_info['client_id'] = settings.GOOGLE_CLIENT_ID
+        if 'client_secret' not in token_info:
+            token_info['client_secret'] = settings.GOOGLE_CLIENT_SECRET
+        if 'token_uri' not in token_info:
+            token_info['token_uri'] = 'https://oauth2.googleapis.com/token'
 
-            return token_info
-
-        except Exception as e:
-            raise ValueError(f"Failed to retrieve Google Drive token information: {str(e)}")
+        return token_info
 
     def validate_credentials(self, credentials: Credentials) -> bool:
         """

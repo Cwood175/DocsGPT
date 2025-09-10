@@ -1,7 +1,7 @@
 import logging
 import uuid
 from abc import ABC, abstractmethod
-from typing import Dict, Generator, List, Optional
+from typing import Generator
 
 from bson.objectid import ObjectId
 
@@ -24,12 +24,12 @@ class BaseAgent(ABC):
         llm_name: str,
         gpt_model: str,
         api_key: str,
-        user_api_key: Optional[str] = None,
+        user_api_key: str | None = None,
         prompt: str = "",
-        chat_history: Optional[List[Dict]] = None,
-        decoded_token: Optional[Dict] = None,
-        attachments: Optional[List[Dict]] = None,
-        json_schema: Optional[Dict] = None,
+        chat_history: list[dict] | None = None,
+        decoded_token: dict | None = None,
+        attachments: list[dict] | None = None,
+        json_schema: dict | None = None,
     ):
         self.endpoint = endpoint
         self.llm_name = llm_name
@@ -57,14 +57,14 @@ class BaseAgent(ABC):
 
     @log_activity()
     def gen(
-        self, query: str, retriever: BaseRetriever, log_context: LogContext = None
-    ) -> Generator[Dict, None, None]:
+        self, query: str, retriever: BaseRetriever, log_context: LogContext | None = None
+    ) -> Generator[dict, None, None]:
         yield from self._gen_inner(query, retriever, log_context)
 
     @abstractmethod
     def _gen_inner(
-        self, query: str, retriever: BaseRetriever, log_context: LogContext
-    ) -> Generator[Dict, None, None]:
+        self, query: str, retriever: BaseRetriever, log_context: LogContext | None
+    ) -> Generator[dict, None, None]:
         pass
 
     def _get_tools(self, api_key: str = None) -> Dict[str, Dict]:

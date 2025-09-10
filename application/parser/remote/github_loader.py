@@ -1,9 +1,10 @@
 import base64
+import mimetypes
 import requests
 from typing import List
+
 from application.parser.remote.base import BaseRemote
 from langchain_core.documents import Document
-import mimetypes
 
 class GitHubLoader(BaseRemote):
     def __init__(self):
@@ -11,7 +12,6 @@ class GitHubLoader(BaseRemote):
         self.headers = {
             "Authorization": f"token {self.access_token}"
         } if self.access_token else {}
-        return
 
     def fetch_file_content(self, repo_url: str, file_path: str) -> str:
         url = f"https://api.github.com/repos/{repo_url}/contents/{file_path}"
@@ -26,8 +26,7 @@ class GitHubLoader(BaseRemote):
                     try:
                         decoded_content = base64.b64decode(content["content"]).decode("utf-8")
                         return f"Filename: {file_path}\n\n{decoded_content}"
-                    except Exception as e:
-                        raise e
+                    except Exception:
                 else:
                     return f"Filename: {file_path} is a binary file and was skipped."
             else:

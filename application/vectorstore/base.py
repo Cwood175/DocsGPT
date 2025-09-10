@@ -1,12 +1,13 @@
-from abc import ABC, abstractmethod
 import os
-from sentence_transformers import SentenceTransformer
-from langchain_openai import OpenAIEmbeddings
+from abc import ABC, abstractmethod
+
 from application.core.settings import settings
+from langchain_openai import OpenAIEmbeddings
+from sentence_transformers import SentenceTransformer
 
 class EmbeddingsWrapper:
-    def __init__(self, model_name, *args, **kwargs):
-        self.model = SentenceTransformer(model_name, config_kwargs={'allow_dangerous_deserialization': True}, *args, **kwargs)
+    def __init__(self, model_name):
+        self.model = SentenceTransformer(model_name, config_kwargs={'allow_dangerous_deserialization': True})
         self.dimension = self.model.get_sentence_embedding_dimension()
 
     def embed_query(self, query: str):
@@ -21,15 +22,17 @@ class EmbeddingsWrapper:
         elif isinstance(text, list):
             return self.embed_documents(text)
         else:
-            raise ValueError("Input must be a string or a list of strings")
+            raise TypeError("Input must be a string or a list of strings")
 
 
 
 class EmbeddingsSingleton:
-    _instances = {}
+    _instances = None
 
     @staticmethod
     def get_instance(embeddings_name, *args, **kwargs):
+        if EmbeddingsSingleton._instances is None:
+            EmbeddingsSingleton._instances = {}
         if embeddings_name not in EmbeddingsSingleton._instances:
             EmbeddingsSingleton._instances[embeddings_name] = EmbeddingsSingleton._create_instance(
                 embeddings_name, *args, **kwargs

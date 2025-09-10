@@ -571,9 +571,8 @@ class ConnectorSync(Resource):
             )
 
         except Exception as err:
-            current_app.logger.error(
-                f"Error syncing connector source: {err}",
-                exc_info=True
+            current_app.logger.exception(
+                f"Error syncing connector source: {err}"
             )
             return make_response(
                 jsonify({
@@ -640,7 +639,7 @@ class ConnectorCallbackStatus(Resource):
             
             return make_response(html_content, 200, {'Content-Type': 'text/html'})
         except Exception as e:
-            current_app.logger.error(f"Error rendering callback status page: {e}")
+            current_app.logger.exception(f"Error rendering callback status page: {e}")
             return make_response("Authentication error occurred", 500, {'Content-Type': 'text/html'})
 
 

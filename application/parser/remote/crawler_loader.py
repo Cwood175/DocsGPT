@@ -43,7 +43,7 @@ class CrawlerLoader(BaseRemote):
                         )
                     )
             except Exception as e:
-                logging.error(f"Error processing URL {current_url}: {e}", exc_info=True)
+                logging.exception(f"Error processing URL {current_url}")
                 continue
 
             # Parse the HTML content to extract all links

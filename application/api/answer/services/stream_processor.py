@@ -3,10 +3,9 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from bson.dbref import DBRef
-
 from bson.objectid import ObjectId
 
 from application.agents.agent_creator import AgentCreator
@@ -55,7 +54,7 @@ def get_prompt(prompt_id: str, prompts_collection=None) -> str:
 
 class StreamProcessor:
     def __init__(
-        self, request_data: Dict[str, Any], decoded_token: Optional[Dict[str, Any]]
+        self, request_data: dict[str, Any], decoded_token: dict[str, Any] | None
     ):
         mongo = MongoDB.get_client()
         self.db = mongo[settings.MONGO_DB_NAME]
@@ -129,13 +128,13 @@ class StreamProcessor:
 
                 if attachment_doc:
                     attachments.append(attachment_doc)
-            except Exception as e:
-                logger.error(
-                    f"Error retrieving attachment {attachment_id}: {e}", exc_info=True
+            except Exception:
+                logger.exception(
+                    f"Error retrieving attachment {attachment_id}"
                 )
         return attachments
 
-    def _get_agent_key(self, agent_id: Optional[str], user_id: Optional[str]) -> tuple:
+    def _get_agent_key(self, agent_id: str | None, user_id: str | None) -> tuple:
         """Get API key for agent with access control"""
         if not agent_id:
             return None, False, None
@@ -164,10 +163,10 @@ class StreamProcessor:
             logger.error(f"Error in get_agent_key: {str(e)}", exc_info=True)
             raise
 
-    def _get_data_from_api_key(self, api_key: str) -> Dict[str, Any]:
+    def _get_data_from_api_key(self, api_key: str) -> dict[str, Any]:
         data = self.agents_collection.find_one({"key": api_key})
         if not data:
-            raise Exception("Invalid API Key, please generate a new key", 401)
+            raise ValueError("Invalid API Key, please generate a new key")
         source = data.get("source")
         if isinstance(source, DBRef):
             source_doc = self.db.dereference(source)

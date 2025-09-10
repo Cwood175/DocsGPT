@@ -1,4 +1,5 @@
 import unittest
+
 from application.llm.openai import OpenAILLM
 
 class TestOpenAILLM(unittest.TestCase):

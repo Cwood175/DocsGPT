@@ -1,7 +1,8 @@
 import logging
+import re
 import requests
-import re  # Import regular expression library
 import xml.etree.ElementTree as ET
+
 from application.parser.remote.base import BaseRemote
 
 class SitemapLoader(BaseRemote):
@@ -11,7 +12,7 @@ class SitemapLoader(BaseRemote):
         self.limit = limit  # Adding limit to control the number of URLs to process
 
     def load_data(self, inputs):
-        sitemap_url= inputs
+        sitemap_url = inputs
         # Check if the input is a list and if it is, use the first element
         if isinstance(sitemap_url, list) and sitemap_url:
             url = sitemap_url[0]
@@ -33,7 +34,7 @@ class SitemapLoader(BaseRemote):
                 documents.extend(loader.load())
                 processed_urls += 1  # Increment the counter after processing each URL
             except Exception as e:
-                logging.error(f"Error processing URL {url}: {e}", exc_info=True)
+                logging.exception(f"Error processing URL {url}: {e}")
                 continue
 
         return documents
