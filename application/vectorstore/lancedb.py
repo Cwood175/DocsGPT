@@ -1,14 +1,17 @@
-from typing import List, Optional
 import importlib
-from application.vectorstore.base import BaseVectorStore
+from typing import Optional
+
 from application.core.settings import settings
+from application.vectorstore.base import BaseVectorStore
+
+from typing import List
 
 class LanceDBVectorStore(BaseVectorStore):
     """Class for LanceDB Vector Store integration."""
 
     def __init__(self, path: str = settings.LANCEDB_PATH,
                  table_name_prefix: str = settings.LANCEDB_TABLE_NAME,
-                 source_id: str = None,
+                 source_id: Optional[str] = None,
                  embeddings_key: str = "embeddings"):
         """Initialize the LanceDB vector store."""
         super().__init__()
@@ -64,7 +67,7 @@ class LanceDBVectorStore(BaseVectorStore):
             ])
             self.docsearch = self.lance_db.create_table(self.table_name, schema=schema)
 
-    def add_texts(self, texts: List[str], metadatas: Optional[List[dict]] = None, source_id: str = None):
+    def add_texts(self, texts: List[str], metadatas: Optional[List[dict]] = None, source_id: Optional[str] = None):
         """Add texts with metadata and their embeddings to the LanceDB table."""
         embeddings = self._get_embeddings(settings.EMBEDDINGS_NAME, self.embeddings_key).embed_documents(texts)
         vectors = []
@@ -103,7 +106,7 @@ class LanceDBVectorStore(BaseVectorStore):
                     f"!= table index dimension ({table_index_dimension})"
                 )
 
-    def filter_documents(self, filter_condition: dict) -> List[dict]:
+    def filter_documents(self, filter_condition: dict) -> list:
         """Filter documents based on certain conditions."""
         self.ensure_table_exists()
 

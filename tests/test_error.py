@@ -1,6 +1,6 @@
 import pytest
-from flask import Flask
 from application.error import bad_request, response_error
+from flask import Flask
 
 
 @pytest.fixture
@@ -27,13 +27,13 @@ def test_bad_request_without_message(app):
 def test_response_error_with_message(app):
     with app.app_context():
         message = "Something went wrong"
-        response = response_error(code_status=500, message=message)
+        response = response_error(status_code=500, message=message)
         assert response.status_code == 500
         assert response.json == {'error': 'Internal Server Error', 'message': message}
 
 
 def test_response_error_without_message(app):
     with app.app_context():
-        response = response_error(code_status=500)
+        response = response_error(status_code=500)
         assert response.status_code == 500
         assert response.json == {'error': 'Internal Server Error'}

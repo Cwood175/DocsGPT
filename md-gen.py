@@ -1,5 +1,7 @@
 import os
 
+import yaml
+
 def create_markdown_from_directory(directory=".", output_file="combined.md"):
     """
     Recursively traverses the given directory, reads all files (ignoring files/folders in ignore_list),
@@ -38,7 +40,7 @@ def create_markdown_from_directory(directory=".", output_file="combined.md"):
                     outfile.write(content)
                     outfile.write("\n\n---\n\n")  # Separator between files
 
-                except Exception as e:
+                except (OSError, yaml.YAMLError) as e:
                     print(f"Error processing file {filepath}: {e}")
 
     print(f"Successfully created {output_file}")

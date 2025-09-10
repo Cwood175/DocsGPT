@@ -1,12 +1,12 @@
-import pymongo
-import os
-import shutil
 import logging
+import os
+import pymongo
+import shutil
 from tqdm import tqdm
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
-logger = logging.getLogger()
+logger = logging.getLogger(__name__)
 
 # Configuration
 MONGO_URI = "mongodb://localhost:27017/"

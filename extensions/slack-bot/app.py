@@ -1,10 +1,10 @@
-import os
 import hashlib
 import httpx
+import os
 import re
-from slack_bolt.async_app import AsyncApp
-from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
 from dotenv import load_dotenv
+from slack_bolt.adapter.socket_mode.async_handler import AsyncSocketModeHandler
+from slack_bolt.async_app import AsyncApp
 
 load_dotenv()
 API_BASE = os.getenv("API_BASE", "https://gptcloud.arc53.com")
@@ -66,9 +66,9 @@ async def message_docs(message, say):
     thread_ts = message['thread_ts']
     user_query = message['text']    
     await client.assistant_threads_setStatus(
-        channel_id = channel,
-        thread_ts = thread_ts,
-        status = "is generating your answer...",
+        channel_id=channel,
+        status="is generating your answer...",
+        thread_ts=thread_ts,
     )
 
     docs_gpt_channel_id = encode_conversation_id(thread_ts)
@@ -78,8 +78,12 @@ async def message_docs(message, say):
     answer = convert_to_slack_markdown(response['answer'])
 
     # Respond in Slack
-    await client.chat_postMessage(text = answer, mrkdwn= True, channel= message['channel'],
-        thread_ts = message['thread_ts'],)
+    await client.chat_postMessage(
+        channel=message['channel'],
+        mrkdwn=True,
+        text=answer,
+        thread_ts=message['thread_ts'],
+    )
 
 def convert_to_slack_markdown(markdown_text: str):
     # Convert bold **text** to *text* for Slack

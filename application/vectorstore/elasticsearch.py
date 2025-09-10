@@ -1,18 +1,19 @@
-from application.vectorstore.base import BaseVectorStore
 from application.core.settings import settings
+from application.vectorstore.base import BaseVectorStore
 from application.vectorstore.document_class import Document
 
 
 class ElasticsearchStore(BaseVectorStore):
-    _es_connection = None  # Class attribute to hold the Elasticsearch connection
-
-    def __init__(self, source_id, embeddings_key, index_name=settings.ELASTIC_INDEX):
+    def __init__(self, source_id: str, embeddings_key: str, index_name: str = settings.ELASTIC_INDEX) -> None:
         super().__init__()
         self.source_id = source_id.replace("application/indexes/", "").rstrip("/")
         self.embeddings_key = embeddings_key
         self.index_name = index_name
-        
-        if ElasticsearchStore._es_connection is None:
+        self._es_connection = None
+        self.docsearch = self._connect()
+
+    def _connect(self):
+        if self._es_connection is None:
             connection_params = {}
             if settings.ELASTIC_URL:
                 connection_params["hosts"] = [settings.ELASTIC_URL]
@@ -24,18 +25,18 @@ class ElasticsearchStore(BaseVectorStore):
                 raise ValueError("Please provide either elasticsearch_url or cloud_id.")
 
             import elasticsearch
-            ElasticsearchStore._es_connection = elasticsearch.Elasticsearch(**connection_params)
-            
-        self.docsearch = ElasticsearchStore._es_connection
+            self._es_connection = elasticsearch.Elasticsearch(**connection_params)
+        return self._es_connection
 
     def connect_to_elasticsearch(
+        self,
         *,
-        es_url = None,
-        cloud_id = None,
-        api_key = None,
-        username = None,
-        password = None,
-    ):
+        es_url: str | None = None,
+        cloud_id: str | None = None,
+        api_key: str | None = None,
+        username: str | None = None,
+        password: str | None = None,
+    ) -> Any:
         try:
             import elasticsearch
         except ImportError:
@@ -73,7 +74,7 @@ class ElasticsearchStore(BaseVectorStore):
 
         return es_client
 
-    def search(self, question, k=2, index_name=settings.ELASTIC_INDEX, *args, **kwargs):
+    def search(self, question: str, k: int = 2, index_name: str = settings.ELASTIC_INDEX) -> list[Document]:
         embeddings = self._get_embeddings(settings.EMBEDDINGS_NAME, self.embeddings_key)
         vector = embeddings.embed_query(question)
         knn = {
@@ -110,8 +111,8 @@ class ElasticsearchStore(BaseVectorStore):
         return doc_list
 
     def _create_index_if_not_exists(
-            self, index_name, dims_length
-        ):
+            self, index_name: str, dims_length: int
+        ) -> None:
 
         if self._es_connection.indices.exists(index=index_name):
             print(f"Index {index_name} already exists.")
@@ -125,8 +126,8 @@ class ElasticsearchStore(BaseVectorStore):
 
     def index(
             self,
-            dims_length,
-        ):
+            dims_length: int,
+        ) -> dict:
         return {
             "mappings": {
                 "properties": {
@@ -142,14 +143,13 @@ class ElasticsearchStore(BaseVectorStore):
 
     def add_texts(
         self,
-        texts,
-        metadatas = None,
-        ids = None,
-        refresh_indices = True,
-        create_index_if_not_exists = True,
-        bulk_kwargs = None,
-        **kwargs,
-        ):
+        texts: list[str],
+        metadatas: list[dict] | None = None,
+        ids: list[str] | None = None,
+        refresh_indices: bool = True,
+        create_index_if_not_exists: bool = True,
+        bulk_kwargs: dict | None = None,
+    ) -> list[str]:
         
         bulk_kwargs = bulk_kwargs or {}
         import uuid
@@ -202,6 +202,6 @@ class ElasticsearchStore(BaseVectorStore):
         else:
             return []
 
-    def delete_index(self):
+    def delete_index(self) -> None:
         self._es_connection.delete_by_query(index=self.index_name, query={"match": {
                                       "metadata.source_id.keyword": self.source_id}},)

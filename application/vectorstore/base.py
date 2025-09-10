@@ -5,8 +5,8 @@ from langchain_openai import OpenAIEmbeddings
 from application.core.settings import settings
 
 class EmbeddingsWrapper:
-    def __init__(self, model_name, *args, **kwargs):
-        self.model = SentenceTransformer(model_name, config_kwargs={'allow_dangerous_deserialization': True}, *args, **kwargs)
+    def __init__(self, model_name, **kwargs):
+        self.model = SentenceTransformer(model_name, config_kwargs={'allow_dangerous_deserialization': True}, **kwargs)
         self.dimension = self.model.get_sentence_embedding_dimension()
 
     def embed_query(self, query: str):
@@ -21,12 +21,12 @@ class EmbeddingsWrapper:
         elif isinstance(text, list):
             return self.embed_documents(text)
         else:
-            raise ValueError("Input must be a string or a list of strings")
+            raise TypeError("Input must be a string or a list of strings")
 
 
 
 class EmbeddingsSingleton:
-    _instances = {}
+    _instances: dict[str, Any] = {}
 
     @staticmethod
     def get_instance(embeddings_name, *args, **kwargs):

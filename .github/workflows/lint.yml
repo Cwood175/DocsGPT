@@ -1,11 +1,6 @@
 name: Python linting
 
-on:
-  push:
-    branches:
-      - '*'
-  pull_request:
-    types: [ opened, synchronize ]
+on: push
 
 jobs:
   ruff:

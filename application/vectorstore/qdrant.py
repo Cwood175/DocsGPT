@@ -1,7 +1,11 @@
 import logging
-from application.vectorstore.base import BaseVectorStore
 from application.core.settings import settings
+from application.vectorstore.base import BaseVectorStore
 from application.vectorstore.document_class import Document
+
+
+class QdrantStore(BaseVectorStore):
+logger = logging.getLogger(__name__)
 
 
 class QdrantStore(BaseVectorStore):
@@ -11,7 +15,7 @@ class QdrantStore(BaseVectorStore):
 
         # Store the source_id for use in add_chunk
         self._source_id = str(source_id).replace("application/indexes/", "").rstrip("/")
-        
+
         self._filter = models.Filter(
             must=[
                 models.FieldCondition(
@@ -21,7 +25,7 @@ class QdrantStore(BaseVectorStore):
             ]
         )
 
-        embedding=self._get_embeddings(settings.EMBEDDINGS_NAME, embeddings_key)
+        embedding = self._get_embeddings(settings.EMBEDDINGS_NAME, embeddings_key)
         self._docsearch = Qdrant.construct_instance(
             ["TEXT_TO_OBTAIN_EMBEDDINGS_DIMENSION"],
             embedding=embedding,
@@ -43,13 +47,16 @@ class QdrantStore(BaseVectorStore):
             collection_exists = settings.QDRANT_COLLECTION_NAME in [
                 collection.name for collection in collections.collections
             ]
-            
+
             if not collection_exists:
                 self._docsearch.client.recreate_collection(
                     collection_name=settings.QDRANT_COLLECTION_NAME,
-                    vectors_config=models.VectorParams(size=embedding.client[1].word_embedding_dimension, distance=models.Distance.COSINE),
+                    vectors_config=models.VectorParams(
+                        size=embedding.client[1].word_embedding_dimension,
+                        distance=models.Distance.COSINE,
+                    ),
                 )
-            
+
             # Ensure the required index exists for metadata.source_id
             try:
                 self._docsearch.client.create_payload_index(
@@ -60,13 +67,15 @@ class QdrantStore(BaseVectorStore):
             except Exception as index_error:
                 # Index might already exist, which is fine
                 if "already exists" not in str(index_error).lower():
-                    logging.warning(f"Could not create index for metadata.source_id: {index_error}")
-                    
+                    logger.warning(
+                        f"Could not create index for metadata.source_id: {index_error}"
+                    )
+
         except Exception as e:
-            logging.warning(f"Could not check for collection: {e}")
+            logger.warning(f"Could not check for collection: {e}")
 
     def search(self, *args, **kwargs):
-        return self._docsearch.similarity_search(filter=self._filter, *args, **kwargs)
+        return self._docsearch.similarity_search(*args, **kwargs)
 
     def add_texts(self, *args, **kwargs):
         return self._docsearch.add_texts(*args, **kwargs)
@@ -104,7 +113,7 @@ class QdrantStore(BaseVectorStore):
                     break
             return chunks
         except Exception as e:
-            logging.error(f"Error getting chunks: {e}", exc_info=True)
+            logger.error(f"Error getting chunks: {e}", exc_info=True)
             return []
 
     def add_chunk(self, text, metadata=None):
@@ -132,5 +141,5 @@ class QdrantStore(BaseVectorStore):
             )
             return True
         except Exception as e:
-            logging.error(f"Error deleting chunk: {e}", exc_info=True)
+            logger.error(f"Error deleting chunk: {e}", exc_info=True)
             return False

@@ -1,5 +1,5 @@
-import unittest
 import json
+import unittest
 from unittest.mock import patch, MagicMock
 from application.cache import gen_cache_key, stream_cache, gen_cache
 from application.utils import get_hash
@@ -25,7 +25,7 @@ def test_make_gen_cache_key():
 
 def test_gen_cache_key_invalid_message_format():
     # Test when messages is not a list
-    with unittest.TestCase.assertRaises(unittest.TestCase, ValueError) as context:
+    with unittest.TestCase.assertRaises(ValueError) as context:
         gen_cache_key("This is not a list", model="docgpt", tools=None)
     assert str(context.exception) == "All messages must be dictionaries."
 

@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 import datetime
 import json
 import logging
@@ -6,10 +7,10 @@ import os
 import shutil
 import string
 import tempfile
-from typing import Any, Dict
 import zipfile
 
 from collections import Counter
+from typing_extensions import Any, Dict
 from urllib.parse import urljoin
 
 import requests
@@ -119,11 +120,12 @@ def upload_index(full_path, file_data):
                 logging.error(f"FAISS pickle file not found: {pkl_path}")
                 raise FileNotFoundError(f"FAISS pickle file not found: {pkl_path}")
 
-            files = {
-                "file_faiss": open(faiss_path, "rb"),
-                "file_pkl": open(pkl_path, "rb"),
-            }
-            response = requests.post(
+            with open(faiss_path, "rb") as faiss_file, open(pkl_path, "rb") as pkl_file:
+                files = {
+                    "file_faiss": faiss_file,
+                    "file_pkl": pkl_file,
+                }
+                response = requests.post(
                 urljoin(settings.API_URL, "/api/upload_index"),
                 files=files,
                 data=file_data,
@@ -215,7 +217,8 @@ def run_agent_logic(agent_config, input_data):
 
 def ingest_worker(
     self, directory, formats, job_name, file_path, filename, user, 
-    retriever="classic"
+    retriever="classic",
+    **kwargs
 ):
     """
     Ingest and process documents.
@@ -270,7 +273,7 @@ def ingest_worker(
                         with open(local_file_path, "wb") as f:
                             f.write(file_data.read())
                     except Exception as e:
-                        logging.error(f"Error downloading file {storage_file_path}: {e}")
+                        logger.error(f"Error downloading file {storage_file_path}: {e}")
                         continue
             else:
                 # Handle single file case
@@ -342,7 +345,7 @@ def ingest_worker(
 
             upload_index(vector_store_path, file_data)
         except Exception as e:
-            logging.error(f"Error in ingest_worker: {e}", exc_info=True)
+            logger.error(f"Error in ingest_worker: {e}", exc_info=True)
             raise
     return {
         "directory": directory,
@@ -403,7 +406,7 @@ def reingest_source_worker(self, source_id, user):
                         with open(local_file_path, "wb") as f:
                             f.write(file_data.read())
                     except Exception as e:
-                        logging.error(f"Error downloading file {storage_file_path}: {e}")
+                        logger.error(f"Error downloading file {storage_file_path}: {e}")
                         continue
 
             reader = SimpleDirectoryReader(
@@ -457,7 +460,7 @@ def reingest_source_worker(self, source_id, user):
                     logging.info("No files removed since last ingest.")
 
             except Exception as e:
-                logging.error(f"Error comparing directory structures: {e}", exc_info=True)
+                logger.error(f"Error comparing directory structures: {e}", exc_info=True)
                 added_files = []
                 removed_files = []
             try:
@@ -496,7 +499,7 @@ def reingest_source_worker(self, source_id, user):
                                         vector_store.delete_chunk(cid)
                                         deleted += 1
                                     except Exception as de:
-                                        logging.error(f"Failed deleting chunk {cid}: {de}")
+                                        logger.error(f"Failed deleting chunk {cid}: {de}")
                         logging.info(f"Deleted {deleted} chunks from {len(removed_files)} removed files")
                     except Exception as e:
                         logging.error(f"Error during deletion of removed file chunks: {e}", exc_info=True)
@@ -655,7 +658,7 @@ def remote_worker(
         }
 
         if operation_mode == "sync":
-            file_data["last_sync"] = datetime.datetime.now()
+            file_data["last_sync"] = datetime.datetime.now(tz=datetime.timezone.utc)
         upload_index(full_path, file_data)
     except Exception as e:
         logging.error("Error in remote_worker task: %s", str(e), exc_info=True)
@@ -749,15 +752,13 @@ def attachment_worker(self, file_info, user):
                 input_files=[local_path], exclude_hidden=True, errors="ignore"
             )
             .load_data()[0]
-            .text, 
+            .text,
         )
-        
-        
+
         token_count = num_tokens_from_string(content)
         if token_count > 100000:
             content = content[:250000]
             token_count = num_tokens_from_string(content)
-        
         self.update_state(
             state="PROGRESS", meta={"current": 80, "status": "Storing in database"}
         )
@@ -874,7 +875,7 @@ def ingest_connector(
     """
     logging.info(f"Starting remote ingestion from {source_type} for user: {user}, job: {job_name}")
     self.update_state(state="PROGRESS", meta={"current": 1})
-    
+
     with tempfile.TemporaryDirectory() as temp_dir:
         try:
             # Step 1: Initialize the appropriate loader
@@ -901,7 +902,8 @@ def ingest_connector(
                 temp_dir,
                 api_source_config
             )
-            
+
+
             if download_info.get("empty_result", False) or not download_info.get("files_downloaded", 0):
                 logging.warning(f"No files were downloaded from {source_type}")
                 # Create empty result directly instead of calling a separate method
