@@ -1,32 +1,37 @@
-from abc import ABC, abstractmethod
 import os
-from sentence_transformers import SentenceTransformer
+from abc import ABC, abstractmethod
+from typing import ClassVar
+
 from langchain_openai import OpenAIEmbeddings
+from sentence_transformers import SentenceTransformer
+
 from application.core.settings import settings
+
 
 class EmbeddingsWrapper:
     def __init__(self, model_name, *args, **kwargs):
-        self.model = SentenceTransformer(model_name, config_kwargs={'allow_dangerous_deserialization': True}, *args, **kwargs)
+        self.model = SentenceTransformer(
+            model_name, *args, config_kwargs={"allow_dangerous_deserialization": True}, **kwargs
+        )
         self.dimension = self.model.get_sentence_embedding_dimension()
 
     def embed_query(self, query: str):
         return self.model.encode(query).tolist()
-    
+
     def embed_documents(self, documents: list):
         return self.model.encode(documents).tolist()
-    
+
     def __call__(self, text):
         if isinstance(text, str):
             return self.embed_query(text)
         elif isinstance(text, list):
             return self.embed_documents(text)
         else:
-            raise ValueError("Input must be a string or a list of strings")
-
+            raise TypeError("Input must be a string or a list of strings")
 
 
 class EmbeddingsSingleton:
-    _instances = {}
+    _instances: ClassVar[dict[str, object]] = {}
 
     @staticmethod
     def get_instance(embeddings_name, *args, **kwargs):
@@ -40,8 +45,12 @@ class EmbeddingsSingleton:
     def _create_instance(embeddings_name, *args, **kwargs):
         embeddings_factory = {
             "openai_text-embedding-ada-002": OpenAIEmbeddings,
-            "huggingface_sentence-transformers/all-mpnet-base-v2": lambda: EmbeddingsWrapper("sentence-transformers/all-mpnet-base-v2"),
-            "huggingface_sentence-transformers-all-mpnet-base-v2": lambda: EmbeddingsWrapper("sentence-transformers/all-mpnet-base-v2"),
+            "huggingface_sentence-transformers/all-mpnet-base-v2": lambda: EmbeddingsWrapper(
+                "sentence-transformers/all-mpnet-base-v2"
+            ),
+            "huggingface_sentence-transformers-all-mpnet-base-v2": lambda: EmbeddingsWrapper(
+                "sentence-transformers/all-mpnet-base-v2"
+            ),
             "huggingface_hkunlp/instructor-large": lambda: EmbeddingsWrapper("hkunlp/instructor-large"),
         }
 
@@ -49,6 +58,7 @@ class EmbeddingsSingleton:
             return embeddings_factory[embeddings_name](*args, **kwargs)
         else:
             return EmbeddingsWrapper(embeddings_name, *args, **kwargs)
+
 
 class BaseVectorStore(ABC):
     def __init__(self):
@@ -66,18 +76,14 @@ class BaseVectorStore(ABC):
             if self.is_azure_configured():
                 os.environ["OPENAI_API_TYPE"] = "azure"
                 embedding_instance = EmbeddingsSingleton.get_instance(
-                    embeddings_name,
-                    model=settings.AZURE_EMBEDDINGS_DEPLOYMENT_NAME
+                    embeddings_name, model=settings.AZURE_EMBEDDINGS_DEPLOYMENT_NAME
                 )
             else:
-                embedding_instance = EmbeddingsSingleton.get_instance(
-                    embeddings_name,
-                    openai_api_key=embeddings_key
-                )
+                embedding_instance = EmbeddingsSingleton.get_instance(embeddings_name, openai_api_key=embeddings_key)
         elif embeddings_name == "huggingface_sentence-transformers/all-mpnet-base-v2":
             if os.path.exists("./models/all-mpnet-base-v2"):
                 embedding_instance = EmbeddingsSingleton.get_instance(
-                    embeddings_name = "./models/all-mpnet-base-v2",
+                    embeddings_name="./models/all-mpnet-base-v2",
                 )
             else:
                 embedding_instance = EmbeddingsSingleton.get_instance(
@@ -87,4 +93,3 @@ class BaseVectorStore(ABC):
             embedding_instance = EmbeddingsSingleton.get_instance(embeddings_name)
 
         return embedding_instance
-    

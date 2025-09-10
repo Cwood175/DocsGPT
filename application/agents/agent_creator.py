@@ -1,9 +1,11 @@
+from typing import ClassVar
+
 from application.agents.classic_agent import ClassicAgent
 from application.agents.react_agent import ReActAgent
 
 
 class AgentCreator:
-    agents = {
+    agents: ClassVar = {
         "classic": ClassicAgent,
         "react": ReActAgent,
     }

@@ -1,4 +1,6 @@
 import logging
+
+logger = logging.getLogger(__name__)
 from application.core.settings import settings
 from application.vectorstore.base import BaseVectorStore
 from application.vectorstore.document_class import Document
@@ -26,10 +28,7 @@ class MongoDBVectorStore(BaseVectorStore):
         try:
             import pymongo
         except ImportError:
-            raise ImportError(
-                "Could not import pymongo python package. "
-                "Please install it with `pip install pymongo`."
-            )
+            raise ImportError("Could not import pymongo python package. Please install it with `pip install pymongo`.")
 
         self._client = pymongo.MongoClient(self._mongo_uri)
         self._database = self._client[database]
@@ -127,6 +126,8 @@ class MongoDBVectorStore(BaseVectorStore):
         self._collection.delete_many({"source_id": self._source_id})
 
     def get_chunks(self):
+        from pymongo.errors import PyMongoError
+
         try:
             chunks = []
             cursor = self._collection.find({"source_id": self._source_id})
@@ -134,20 +135,15 @@ class MongoDBVectorStore(BaseVectorStore):
                 doc_id = str(doc.get("_id"))
                 text = doc.get(self._text_key)
                 metadata = {
-                    k: v
-                    for k, v in doc.items()
-                    if k
-                    not in ["_id", self._text_key, self._embedding_key, "source_id"]
+                    k: v for k, v in doc.items() if k not in ["_id", self._text_key, self._embedding_key, "source_id"]
                 }
 
                 if text:
-                    chunks.append(
-                        {"doc_id": doc_id, "text": text, "metadata": metadata}
-                    )
+                    chunks.append({"doc_id": doc_id, "text": text, "metadata": metadata})
 
             return chunks
-        except Exception as e:
-            logging.error(f"Error getting chunks: {e}", exc_info=True)
+        except PyMongoError:
+            logger.exception("Error getting chunks")
             return []
 
     def add_chunk(self, text, metadata=None):
@@ -166,12 +162,14 @@ class MongoDBVectorStore(BaseVectorStore):
         return str(result.inserted_id)
 
     def delete_chunk(self, chunk_id):
-        try:
-            from bson.objectid import ObjectId
+        from bson.errors import InvalidId
+        from bson.objectid import ObjectId
+        from pymongo.errors import PyMongoError
 
+        try:
             object_id = ObjectId(chunk_id)
             result = self._collection.delete_one({"_id": object_id})
             return result.deleted_count > 0
-        except Exception as e:
-            logging.error(f"Error deleting chunk: {e}", exc_info=True)
+        except (InvalidId, PyMongoError):
+            logger.exception("Error deleting chunk")
             return False

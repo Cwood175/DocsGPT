@@ -3,29 +3,29 @@ import json
 import math
 import os
 import secrets
-import uuid
-from functools import wraps
-from typing import Optional, Tuple
 import tempfile
+import uuid
 import zipfile
+from functools import wraps
+
 from bson.binary import Binary, UuidRepresentation
 from bson.dbref import DBRef
 from bson.objectid import ObjectId
 from flask import (
     Blueprint,
+    Response,
     current_app,
     jsonify,
     make_response,
     redirect,
     request,
-    Response,
 )
-from flask_restx import fields, inputs, Namespace, Resource
+from flask_restx import Namespace, Resource, fields, inputs
 from pymongo import ReturnDocument
 from werkzeug.utils import secure_filename
 
 from application.agents.tools.tool_manager import ToolManager
-
+from application.api import api
 from application.api.user.tasks import (
     ingest,
     ingest_connector_task,
@@ -35,19 +35,18 @@ from application.api.user.tasks import (
 )
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
-from application.api import api
+from application.parser.connectors.connector_creator import ConnectorCreator
 from application.storage.storage_creator import StorageCreator
 from application.tts.google_tts import GoogleTTS
 from application.utils import (
     check_required_fields,
     generate_image_url,
+    num_tokens_from_string,
     safe_filename,
     validate_function_name,
     validate_required_fields,
 )
-from application.utils import num_tokens_from_string
 from application.vectorstore.vector_creator import VectorCreator
-from application.parser.connectors.connector_creator import ConnectorCreator
 
 storage = StorageCreator.get_storage()
 
@@ -72,16 +71,14 @@ try:
         background=True,
     )
     users_collection.create_index("user_id", unique=True)
-except Exception as e:
+except PyMongoError as e:
     print("Error creating indexes:", e)
 
 user = Blueprint("user", __name__)
 user_ns = Namespace("user", description="User related operations", path="/")
 api.add_namespace(user_ns)
 
-current_dir = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
+current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 tool_config = {}
 tool_manager = ToolManager(config=tool_config)
@@ -136,9 +133,7 @@ def ensure_user_doc(user_id):
 
 
 def resolve_tool_details(tool_ids):
-    tools = user_tools_collection.find(
-        {"_id": {"$in": [ObjectId(tid) for tid in tool_ids]}}
-    )
+    tools = user_tools_collection.find({"_id": {"$in": [ObjectId(tid) for tid in tool_ids]}})
     return [
         {
             "id": str(tool["_id"]),
@@ -166,14 +161,16 @@ def get_vector_store(source_id):
 
 def handle_image_upload(
     request, existing_url: str, user: str, storage, base_path: str = "attachments/"
-) -> Tuple[str, Optional[Response]]:
+) -> tuple[str, Response | None]:
     image_url = existing_url
 
     if "image" in request.files:
         file = request.files["image"]
         if file.filename != "":
             filename = secure_filename(file.filename)
-            upload_path = f"{settings.UPLOAD_FOLDER.rstrip('/')}/{user}/{base_path.rstrip('/')}/{uuid.uuid4()}_{filename}"
+            upload_path = (
+                f"{settings.UPLOAD_FOLDER.rstrip('/')}/{user}/{base_path.rstrip('/')}/{uuid.uuid4()}_{filename}"
+            )
             try:
                 storage.save_file(file, upload_path, storage_class="STANDARD")
                 image_url = upload_path
@@ -194,22 +191,19 @@ class DeleteConversation(Resource):
         params={"id": "The ID of the conversation to delete"},
     )
     def post(self):
+        from bson.errors import InvalidId
+        from pymongo.errors import PyMongoError
+
         decoded_token = request.decoded_token
         if not decoded_token:
             return make_response(jsonify({"success": False}), 401)
         conversation_id = request.args.get("id")
         if not conversation_id:
-            return make_response(
-                jsonify({"success": False, "message": "ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "ID is required"}), 400)
         try:
-            conversations_collection.delete_one(
-                {"_id": ObjectId(conversation_id), "user": decoded_token["sub"]}
-            )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error deleting conversation: {err}", exc_info=True
-            )
+            conversations_collection.delete_one({"_id": ObjectId(conversation_id), "user": decoded_token["sub"]})
+        except (InvalidId, PyMongoError) as err:
+            current_app.logger.exception(f"Error deleting conversation: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -226,10 +220,8 @@ class DeleteAllConversations(Resource):
         user_id = decoded_token.get("sub")
         try:
             conversations_collection.delete_many({"user": user_id})
-        except Exception as err:
-            current_app.logger.error(
-                f"Error deleting all conversations: {err}", exc_info=True
-            )
+        except PyMongoError as err:
+            current_app.logger.exception(f"Error deleting all conversations: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -262,16 +254,14 @@ class GetConversations(Resource):
                 {
                     "id": str(conversation["_id"]),
                     "name": conversation["name"],
-                    "agent_id": conversation.get("agent_id", None),
+                    "agent_id": conversation.get("agent_id"),
                     "is_shared_usage": conversation.get("is_shared_usage", False),
-                    "shared_token": conversation.get("shared_token", None),
+                    "shared_token": conversation.get("shared_token"),
                 }
                 for conversation in conversations
             ]
-        except Exception as err:
-            current_app.logger.error(
-                f"Error retrieving conversations: {err}", exc_info=True
-            )
+        except (PyMongoError, KeyError) as err:
+            current_app.logger.exception(f"Error retrieving conversations: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify(list_conversations), 200)
 
@@ -283,14 +273,15 @@ class GetSingleConversation(Resource):
         params={"id": "The conversation ID"},
     )
     def get(self):
+        from bson.errors import InvalidId
+        from pymongo.errors import PyMongoError
+
         decoded_token = request.decoded_token
         if not decoded_token:
             return make_response(jsonify({"success": False}), 401)
         conversation_id = request.args.get("id")
         if not conversation_id:
-            return make_response(
-                jsonify({"success": False, "message": "ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "ID is required"}), 400)
         try:
             conversation = conversations_collection.find_one(
                 {"_id": ObjectId(conversation_id), "user": decoded_token.get("sub")}
@@ -301,38 +292,29 @@ class GetSingleConversation(Resource):
             # Process queries to include attachment names
             queries = conversation["queries"]
             for query in queries:
-                if "attachments" in query and query["attachments"]:
+                if query.get("attachments"):
                     attachment_details = []
                     for attachment_id in query["attachments"]:
                         try:
-                            attachment = attachments_collection.find_one(
-                                {"_id": ObjectId(attachment_id)}
-                            )
+                            attachment = attachments_collection.find_one({"_id": ObjectId(attachment_id)})
                             if attachment:
                                 attachment_details.append(
                                     {
                                         "id": str(attachment["_id"]),
-                                        "fileName": attachment.get(
-                                            "filename", "Unknown file"
-                                        ),
+                                        "fileName": attachment.get("filename", "Unknown file"),
                                     }
                                 )
-                        except Exception as e:
-                            current_app.logger.error(
-                                f"Error retrieving attachment {attachment_id}: {e}",
-                                exc_info=True,
-                            )
+                        except (InvalidId, PyMongoError, TypeError) as e:
+                            current_app.logger.exception(f"Error retrieving attachment {attachment_id}: {e}")
                     query["attachments"] = attachment_details
-        except Exception as err:
-            current_app.logger.error(
-                f"Error retrieving conversation: {err}", exc_info=True
-            )
+        except (InvalidId, PyMongoError, TypeError, KeyError) as err:
+            current_app.logger.exception(f"Error retrieving conversation: {err}")
             return make_response(jsonify({"success": False}), 400)
         data = {
             "queries": queries,
             "agent_id": conversation.get("agent_id"),
             "is_shared_usage": conversation.get("is_shared_usage", False),
-            "shared_token": conversation.get("shared_token", None),
+            "shared_token": conversation.get("shared_token"),
         }
         return make_response(jsonify(data), 200)
 
@@ -344,9 +326,7 @@ class UpdateConversationName(Resource):
             "UpdateConversationModel",
             {
                 "id": fields.String(required=True, description="Conversation ID"),
-                "name": fields.String(
-                    required=True, description="New name of the conversation"
-                ),
+                "name": fields.String(required=True, description="New name of the conversation"),
             },
         )
     )
@@ -367,10 +347,8 @@ class UpdateConversationName(Resource):
                 {"_id": ObjectId(data["id"]), "user": decoded_token.get("sub")},
                 {"$set": {"name": data["name"]}},
             )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error updating conversation name: {err}", exc_info=True
-            )
+        except (InvalidId, PyMongoError) as err:
+            current_app.logger.exception(f"Error updating conversation name: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -381,18 +359,14 @@ class SubmitFeedback(Resource):
         api.model(
             "FeedbackModel",
             {
-                "question": fields.String(
-                    required=False, description="The user question"
-                ),
+                "question": fields.String(required=False, description="The user question"),
                 "answer": fields.String(required=False, description="The AI answer"),
                 "feedback": fields.String(required=True, description="User feedback"),
                 "question_index": fields.Integer(
                     required=True,
                     description="The question number in that particular conversation",
                 ),
-                "conversation_id": fields.String(
-                    required=True, description="id of the particular conversation"
-                ),
+                "conversation_id": fields.String(required=True, description="id of the particular conversation"),
                 "api_key": fields.String(description="Optional API key"),
             },
         )
@@ -437,16 +411,12 @@ class SubmitFeedback(Resource):
                     },
                     {
                         "$set": {
-                            f"queries.{data['question_index']}.feedback": data[
-                                "feedback"
-                            ],
-                            f"queries.{data['question_index']}.feedback_timestamp": datetime.datetime.now(
-                                datetime.timezone.utc
-                            ),
+                            f"queries.{data['question_index']}.feedback": data["feedback"],
+                            f"queries.{data['question_index']}.feedback_timestamp": datetime.datetime.now(datetime.UTC),
                         }
                     },
                 )
-        except Exception as err:
+        except (InvalidId, PyMongoError) as err:
             current_app.logger.error(f"Error submitting feedback: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
@@ -461,14 +431,12 @@ class DeleteByIds(Resource):
     def get(self):
         ids = request.args.get("path")
         if not ids:
-            return make_response(
-                jsonify({"success": False, "message": "Missing required fields"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Missing required fields"}), 400)
         try:
             result = sources_collection.delete_index(ids=ids)
             if result:
                 return make_response(jsonify({"success": True}), 200)
-        except Exception as err:
+        except (KeyError, TypeError, ValueError) as err:
             current_app.logger.error(f"Error deleting indexes: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": False}), 400)
@@ -486,12 +454,8 @@ class DeleteOldIndexes(Resource):
             return make_response(jsonify({"success": False}), 401)
         source_id = request.args.get("source_id")
         if not source_id:
-            return make_response(
-                jsonify({"success": False, "message": "Missing required fields"}), 400
-            )
-        doc = sources_collection.find_one(
-            {"_id": ObjectId(source_id), "user": decoded_token.get("sub")}
-        )
+            return make_response(jsonify({"success": False, "message": "Missing required fields"}), 400)
+        doc = sources_collection.find_one({"_id": ObjectId(source_id), "user": decoded_token.get("sub")})
         if not doc:
             return make_response(jsonify({"status": "not found"}), 404)
 
@@ -500,19 +464,16 @@ class DeleteOldIndexes(Resource):
         try:
             # Delete vector index
             if settings.VECTOR_STORE == "faiss":
-                index_path = f"indexes/{str(doc['_id'])}"
+                index_path = f"indexes/{doc['_id']!s}"
                 if storage.file_exists(f"{index_path}/index.faiss"):
                     storage.delete_file(f"{index_path}/index.faiss")
                 if storage.file_exists(f"{index_path}/index.pkl"):
                     storage.delete_file(f"{index_path}/index.pkl")
             else:
-                vectorstore = VectorCreator.create_vectorstore(
-                    settings.VECTOR_STORE, source_id=str(doc["_id"])
-                )
+                vectorstore = VectorCreator.create_vectorstore(settings.VECTOR_STORE, source_id=str(doc["_id"]))
                 vectorstore.delete_index()
 
-            if "file_path" in doc and doc["file_path"]:
-                file_path = doc["file_path"]
+            if file_path := doc.get("file_path"):
                 if storage.is_directory(file_path):
                     files = storage.list_files(file_path)
                     for f in files:
@@ -523,9 +484,7 @@ class DeleteOldIndexes(Resource):
         except FileNotFoundError:
             pass
         except Exception as err:
-            current_app.logger.error(
-                f"Error deleting files and indexes: {err}", exc_info=True
-            )
+            current_app.logger.exception(f"Error deleting files and indexes: {err}")
             return make_response(jsonify({"success": False}), 400)
 
         sources_collection.delete_one({"_id": ObjectId(source_id)})
@@ -576,7 +535,6 @@ class UploadFile(Resource):
         try:
             storage = StorageCreator.get_storage()
 
-
             for file in files:
                 original_filename = file.filename
                 safe_file = safe_filename(original_filename)
@@ -587,7 +545,7 @@ class UploadFile(Resource):
 
                     if zipfile.is_zipfile(temp_file_path):
                         try:
-                            with zipfile.ZipFile(temp_file_path, 'r') as zip_ref:
+                            with zipfile.ZipFile(temp_file_path, "r") as zip_ref:
                                 zip_ref.extractall(path=temp_dir)
 
                                 # Walk through extracted files and upload them
@@ -599,33 +557,45 @@ class UploadFile(Resource):
                                         rel_path = os.path.relpath(os.path.join(root, extracted_file), temp_dir)
                                         storage_path = f"{base_path}/{rel_path}"
 
-                                        with open(os.path.join(root, extracted_file), 'rb') as f:
+                                        with open(os.path.join(root, extracted_file), "rb") as f:
                                             storage.save_file(f, storage_path)
-                        except Exception as e:
-                            current_app.logger.error(f"Error extracting zip: {e}", exc_info=True)
+                        except (zipfile.BadZipFile, OSError) as e:
+                            current_app.logger.exception(f"Error extracting zip: {e}")
                             # If zip extraction fails, save the original zip file
                             file_path = f"{base_path}/{safe_file}"
-                            with open(temp_file_path, 'rb') as f:
+                            with open(temp_file_path, "rb") as f:
                                 storage.save_file(f, file_path)
                     else:
                         # For non-zip files, save directly
                         file_path = f"{base_path}/{safe_file}"
-                        with open(temp_file_path, 'rb') as f:
+                        with open(temp_file_path, "rb") as f:
                             storage.save_file(f, file_path)
 
             task = ingest.delay(
                 settings.UPLOAD_FOLDER,
                 [
-                    ".rst", ".md", ".pdf", ".txt", ".docx", ".csv", ".epub",
-                    ".html", ".mdx", ".json", ".xlsx", ".pptx", ".png",
-                    ".jpg", ".jpeg",
+                    ".rst",
+                    ".md",
+                    ".pdf",
+                    ".txt",
+                    ".docx",
+                    ".csv",
+                    ".epub",
+                    ".html",
+                    ".mdx",
+                    ".json",
+                    ".xlsx",
+                    ".pptx",
+                    ".png",
+                    ".jpg",
+                    ".jpeg",
                 ],
                 job_name,
                 user,
                 file_path=base_path,
-                filename=dir_name
+                filename=dir_name,
             )
-        except Exception as err:
+        except (OSError, RuntimeError, ValueError, zipfile.BadZipFile) as err:
             current_app.logger.error(f"Error uploading file: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True, "task_id": task.id}), 200)
@@ -638,11 +608,19 @@ class ManageSourceFiles(Resource):
             "ManageSourceFilesModel",
             {
                 "source_id": fields.String(required=True, description="Source ID to modify"),
-                "operation": fields.String(required=True, description="Operation: 'add', 'remove', or 'remove_directory'"),
-                "file_paths": fields.List(fields.String, required=False, description="File paths to remove (for remove operation)"),
-                "directory_path": fields.String(required=False, description="Directory path to remove (for remove_directory operation)"),
+                "operation": fields.String(
+                    required=True, description="Operation: 'add', 'remove', or 'remove_directory'"
+                ),
+                "file_paths": fields.List(
+                    fields.String, required=False, description="File paths to remove (for remove operation)"
+                ),
+                "directory_path": fields.String(
+                    required=False, description="Directory path to remove (for remove_directory operation)"
+                ),
                 "file": fields.Raw(required=False, description="Files to add (for add operation)"),
-                "parent_dir": fields.String(required=False, description="Parent directory path relative to source root"),
+                "parent_dir": fields.String(
+                    required=False, description="Parent directory path relative to source root"
+                ),
             },
         )
     )
@@ -659,9 +637,7 @@ class ManageSourceFiles(Resource):
         operation = request.form.get("operation")
 
         if not source_id or not operation:
-            return make_response(
-                jsonify({"success": False, "message": "source_id and operation are required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "source_id and operation are required"}), 400)
 
         if operation not in ["add", "remove", "remove_directory"]:
             return make_response(
@@ -670,19 +646,17 @@ class ManageSourceFiles(Resource):
 
         try:
             ObjectId(source_id)
-        except Exception:
-            return make_response(
-                jsonify({"success": False, "message": "Invalid source ID format"}), 400
-            )
+        except InvalidId:
+            return make_response(jsonify({"success": False, "message": "Invalid source ID format"}), 400)
+
+        from pymongo.errors import PyMongoError
 
         try:
             source = sources_collection.find_one({"_id": ObjectId(source_id), "user": user})
             if not source:
-                return make_response(
-                    jsonify({"success": False, "message": "Source not found or access denied"}), 404
-                )
-        except Exception as err:
-            current_app.logger.error(f"Error finding source: {err}", exc_info=True)
+                return make_response(jsonify({"success": False, "message": "Source not found or access denied"}), 404)
+        except PyMongoError as err:
+            current_app.logger.exception(f"Error finding source: {err}")
             return make_response(jsonify({"success": False, "message": "Database error"}), 500)
 
         try:
@@ -691,9 +665,7 @@ class ManageSourceFiles(Resource):
             parent_dir = request.form.get("parent_dir", "")
 
             if parent_dir and (parent_dir.startswith("/") or ".." in parent_dir):
-                return make_response(
-                    jsonify({"success": False, "message": "Invalid parent directory path"}), 400
-                )
+                return make_response(jsonify({"success": False, "message": "Invalid parent directory path"}), 400)
 
             if operation == "add":
                 files = request.files.getlist("file")
@@ -722,15 +694,20 @@ class ManageSourceFiles(Resource):
 
                 task = reingest_source_task.delay(source_id=source_id, user=user)
 
-                return make_response(jsonify({
-                    "success": True,
-                    "message": f"Added {len(added_files)} files",
-                    "added_files": added_files,
-                    "parent_dir": parent_dir,
-                    "reingest_task_id": task.id
-                }), 200)
+                return make_response(
+                    jsonify(
+                        {
+                            "success": True,
+                            "message": f"Added {len(added_files)} files",
+                            "added_files": added_files,
+                            "parent_dir": parent_dir,
+                            "reingest_task_id": task.id,
+                        }
+                    ),
+                    200,
+                )
 
-            elif operation == "remove":
+            if operation == "remove":
                 file_paths_str = request.form.get("file_paths")
                 if not file_paths_str:
                     return make_response(
@@ -739,10 +716,8 @@ class ManageSourceFiles(Resource):
 
                 try:
                     file_paths = json.loads(file_paths_str) if isinstance(file_paths_str, str) else file_paths_str
-                except Exception:
-                    return make_response(
-                        jsonify({"success": False, "message": "Invalid file_paths format"}), 400
-                    )
+                except json.JSONDecodeError:
+                    return make_response(jsonify({"success": False, "message": "Invalid file_paths format"}), 400)
 
                 # Remove files from storage and directory structure
                 removed_files = []
@@ -759,18 +734,26 @@ class ManageSourceFiles(Resource):
 
                 task = reingest_source_task.delay(source_id=source_id, user=user)
 
-                return make_response(jsonify({
-                    "success": True,
-                    "message": f"Removed {len(removed_files)} files",
-                    "removed_files": removed_files,
-                    "reingest_task_id": task.id
-                }), 200)
+                return make_response(
+                    jsonify(
+                        {
+                            "success": True,
+                            "message": f"Removed {len(removed_files)} files",
+                            "removed_files": removed_files,
+                            "reingest_task_id": task.id,
+                        }
+                    ),
+                    200,
+                )
 
             elif operation == "remove_directory":
                 directory_path = request.form.get("directory_path")
                 if not directory_path:
                     return make_response(
-                        jsonify({"success": False, "message": "directory_path required for remove_directory operation"}), 400
+                        jsonify(
+                            {"success": False, "message": "directory_path required for remove_directory operation"}
+                        ),
+                        400,
                     )
 
                 # Validate directory path (prevent path traversal)
@@ -779,9 +762,7 @@ class ManageSourceFiles(Resource):
                         f"Invalid directory path attempted for removal. "
                         f"User: {user}, Source ID: {source_id}, Directory path: {directory_path}"
                     )
-                    return make_response(
-                        jsonify({"success": False, "message": "Invalid directory path"}), 400
-                    )
+                    return make_response(jsonify({"success": False, "message": "Invalid directory path"}), 400)
 
                 full_directory_path = f"{source_file_path}/{directory_path}" if directory_path else source_file_path
 
@@ -803,9 +784,7 @@ class ManageSourceFiles(Resource):
                         f"User: {user}, Source ID: {source_id}, Directory path: {directory_path}, "
                         f"Full path: {full_directory_path}"
                     )
-                    return make_response(
-                        jsonify({"success": False, "message": "Failed to remove directory"}), 500
-                    )
+                    return make_response(jsonify({"success": False, "message": "Failed to remove directory"}), 500)
 
                 current_app.logger.info(
                     f"Successfully removed directory. "
@@ -818,12 +797,17 @@ class ManageSourceFiles(Resource):
 
                 task = reingest_source_task.delay(source_id=source_id, user=user)
 
-                return make_response(jsonify({
-                    "success": True,
-                    "message": f"Successfully removed directory: {directory_path}",
-                    "removed_directory": directory_path,
-                    "reingest_task_id": task.id
-                }), 200)
+                return make_response(
+                    jsonify(
+                        {
+                            "success": True,
+                            "message": f"Successfully removed directory: {directory_path}",
+                            "removed_directory": directory_path,
+                            "reingest_task_id": task.id,
+                        }
+                    ),
+                    200,
+                )
 
         except Exception as err:
             error_context = f"operation={operation}, user={user}, source_id={source_id}"
@@ -837,7 +821,7 @@ class ManageSourceFiles(Resource):
                 parent_dir = request.form.get("parent_dir", "")
                 error_context += f", parent_dir={parent_dir}"
 
-            current_app.logger.error(f"Error managing source files: {err} ({error_context})", exc_info=True)
+            current_app.logger.exception(f"Error managing source files: {err} ({error_context})")
             return make_response(jsonify({"success": False, "message": "Operation failed"}), 500)
 
 
@@ -848,9 +832,7 @@ class UploadRemote(Resource):
             "RemoteUploadModel",
             {
                 "user": fields.String(required=True, description="User ID"),
-                "source": fields.String(
-                    required=True, description="Source of the data"
-                ),
+                "source": fields.String(required=True, description="Source of the data"),
                 "name": fields.String(required=True, description="Job name"),
                 "data": fields.String(required=True, description="Data to process"),
                 "repo_url": fields.String(description="GitHub repository URL"),
@@ -882,22 +864,24 @@ class UploadRemote(Resource):
             elif data["source"] in ConnectorCreator.get_supported_connectors():
                 session_token = config.get("session_token")
                 if not session_token:
-                    return make_response(jsonify({
-                        "success": False,
-                        "error": f"Missing session_token in {data['source']} configuration"
-                    }), 400)
+                    return make_response(
+                        jsonify(
+                            {"success": False, "error": f"Missing session_token in {data['source']} configuration"}
+                        ),
+                        400,
+                    )
 
                 # Process file_ids
                 file_ids = config.get("file_ids", [])
                 if isinstance(file_ids, str):
-                    file_ids = [id.strip() for id in file_ids.split(',') if id.strip()]
+                    file_ids = [id.strip() for id in file_ids.split(",") if id.strip()]
                 elif not isinstance(file_ids, list):
                     file_ids = []
 
                 # Process folder_ids
                 folder_ids = config.get("folder_ids", [])
                 if isinstance(folder_ids, str):
-                    folder_ids = [id.strip() for id in folder_ids.split(',') if id.strip()]
+                    folder_ids = [id.strip() for id in folder_ids.split(",") if id.strip()]
                 elif not isinstance(folder_ids, list):
                     folder_ids = []
 
@@ -912,7 +896,7 @@ class UploadRemote(Resource):
                     file_ids=file_ids,
                     folder_ids=folder_ids,
                     recursive=config.get("recursive", False),
-                    retriever=config.get("retriever", "classic")
+                    retriever=config.get("retriever", "classic"),
                 )
                 return make_response(jsonify({"success": True, "task_id": task.id}), 200)
             task = ingest_remote.delay(
@@ -921,10 +905,8 @@ class UploadRemote(Resource):
                 user=decoded_token.get("sub"),
                 loader=data["source"],
             )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error uploading remote source: {err}", exc_info=True
-            )
+        except (json.JSONDecodeError, RuntimeError) as err:
+            current_app.logger.exception(f"Error uploading remote source: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True, "task_id": task.id}), 200)
 
@@ -941,20 +923,16 @@ class TaskStatus(Resource):
     def get(self):
         task_id = request.args.get("task_id")
         if not task_id:
-            return make_response(
-                jsonify({"success": False, "message": "Task ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Task ID is required"}), 400)
         try:
             from application.celery_init import celery
 
             task = celery.AsyncResult(task_id)
             task_meta = task.info
             print(f"Task status: {task.status}")
-            if not isinstance(
-                task_meta, (dict, list, str, int, float, bool, type(None))
-            ):
+            if not isinstance(task_meta, (dict, list, str, int, float, bool, type(None))):
                 task_meta = str(task_meta)  # Convert to a string representation
-        except Exception as err:
+        except (ImportError, AttributeError, TypeError, ValueError, OSError) as err:
             current_app.logger.error(f"Error getting task status: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"status": task.status, "result": task_meta}), 200)
@@ -962,9 +940,7 @@ class TaskStatus(Resource):
 
 @user_ns.route("/api/combine")
 class RedirectToSources(Resource):
-    @api.doc(
-        description="Redirects /api/combine to /api/sources for backward compatibility"
-    )
+    @api.doc(description="Redirects /api/combine to /api/sources for backward compatibility")
     def get(self):
         return redirect("/api/sources", code=301)
 
@@ -973,6 +949,8 @@ class RedirectToSources(Resource):
 class PaginatedSources(Resource):
     @api.doc(description="Get document with pagination, sorting and filtering")
     def get(self):
+        from pymongo.errors import PyMongoError
+
         decoded_token = request.decoded_token
         if not decoded_token:
             return make_response(jsonify({"success": False}), 401)
@@ -983,9 +961,7 @@ class PaginatedSources(Resource):
         rows_per_page = int(request.args.get("rows", 10))  # Default to 10
         # add .strip() to remove leading and trailing whitespaces
 
-        search_term = request.args.get(
-            "search", ""
-        ).strip()  # add search for filter documents
+        search_term = request.args.get("search", "").strip()  # add search for filter documents
 
         # Prepare query for filtering
 
@@ -997,19 +973,12 @@ class PaginatedSources(Resource):
             }
         total_documents = sources_collection.count_documents(query)
         total_pages = max(1, math.ceil(total_documents / rows_per_page))
-        page = min(
-            max(1, page), total_pages
-        )  # add this to make sure page inbound is within the range
+        page = min(max(1, page), total_pages)  # add this to make sure page inbound is within the range
         sort_order = 1 if sort_order == "asc" else -1
         skip = (page - 1) * rows_per_page
 
         try:
-            documents = (
-                sources_collection.find(query)
-                .sort(sort_field, sort_order)
-                .skip(skip)
-                .limit(rows_per_page)
-            )
+            documents = sources_collection.find(query).sort(sort_field, sort_order).skip(skip).limit(rows_per_page)
 
             paginated_docs = []
             for doc in documents:
@@ -1023,7 +992,7 @@ class PaginatedSources(Resource):
                     "retriever": doc.get("retriever", "classic"),
                     "syncFrequency": doc.get("sync_frequency", ""),
                     "isNested": bool(doc.get("directory_structure")),
-                    "type": doc.get("type", "file")
+                    "type": doc.get("type", "file"),
                 }
                 paginated_docs.append(doc_data)
             response = {
@@ -1033,10 +1002,8 @@ class PaginatedSources(Resource):
                 "paginated": paginated_docs,
             }
             return make_response(jsonify(response), 200)
-        except Exception as err:
-            current_app.logger.error(
-                f"Error retrieving paginated sources: {err}", exc_info=True
-            )
+        except (PyMongoError, KeyError, TypeError) as err:
+            current_app.logger.exception(f"Error retrieving paginated sources: {err}")
             return make_response(jsonify({"success": False}), 400)
 
 
@@ -1072,10 +1039,10 @@ class CombinedJson(Resource):
                         "retriever": index.get("retriever", "classic"),
                         "syncFrequency": index.get("sync_frequency", ""),
                         "is_nested": bool(index.get("directory_structure")),
-                        "type": index.get("type", "file")  # Add type field with default "file"
+                        "type": index.get("type", "file"),  # Add type field with default "file"
                     }
                 )
-        except Exception as err:
+        except (KeyError, TypeError) as err:
             current_app.logger.error(f"Error retrieving sources: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify(data), 200)
@@ -1100,7 +1067,7 @@ class CheckDocs(Resource):
             vectorstore = "vectors/" + secure_filename(data["docs"])
             if os.path.exists(vectorstore) or data["docs"] == "default":
                 return {"status": "exists"}, 200
-        except Exception as err:
+        except (OSError, TypeError, ValueError) as err:
             current_app.logger.error(f"Error checking document: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"status": "not found"}), 404)
@@ -1111,9 +1078,7 @@ class CreatePrompt(Resource):
     create_prompt_model = api.model(
         "CreatePromptModel",
         {
-            "content": fields.String(
-                required=True, description="Content of the prompt"
-            ),
+            "content": fields.String(required=True, description="Content of the prompt"),
             "name": fields.String(required=True, description="Name of the prompt"),
         },
     )
@@ -1131,7 +1096,6 @@ class CreatePrompt(Resource):
             return missing_fields
         user = decoded_token.get("sub")
         try:
-
             resp = prompts_collection.insert_one(
                 {
                     "name": data["name"],
@@ -1140,7 +1104,7 @@ class CreatePrompt(Resource):
                 }
             )
             new_id = str(resp.inserted_id)
-        except Exception as err:
+        except PyMongoError as err:
             current_app.logger.error(f"Error creating prompt: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"id": new_id}), 200)
@@ -1150,6 +1114,8 @@ class CreatePrompt(Resource):
 class GetPrompts(Resource):
     @api.doc(description="Get all prompts for the user")
     def get(self):
+        from pymongo.errors import PyMongoError
+
         decoded_token = request.decoded_token
         if not decoded_token:
             return make_response(jsonify({"success": False}), 401)
@@ -1170,7 +1136,7 @@ class GetPrompts(Resource):
                         "type": "private",
                     }
                 )
-        except Exception as err:
+        except (PyMongoError, KeyError) as err:
             current_app.logger.error(f"Error retrieving prompts: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify(list_prompts), 200)
@@ -1186,9 +1152,7 @@ class GetSinglePrompt(Resource):
         user = decoded_token.get("sub")
         prompt_id = request.args.get("id")
         if not prompt_id:
-            return make_response(
-                jsonify({"success": False, "message": "ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "ID is required"}), 400)
         try:
             if prompt_id == "default":
                 with open(
@@ -1197,24 +1161,20 @@ class GetSinglePrompt(Resource):
                 ) as f:
                     chat_combine_template = f.read()
                 return make_response(jsonify({"content": chat_combine_template}), 200)
-            elif prompt_id == "creative":
+            if prompt_id == "creative":
                 with open(
                     os.path.join(current_dir, "prompts", "chat_combine_creative.txt"),
                     "r",
                 ) as f:
                     chat_reduce_creative = f.read()
                 return make_response(jsonify({"content": chat_reduce_creative}), 200)
-            elif prompt_id == "strict":
-                with open(
-                    os.path.join(current_dir, "prompts", "chat_combine_strict.txt"), "r"
-                ) as f:
+            if prompt_id == "strict":
+                with open(os.path.join(current_dir, "prompts", "chat_combine_strict.txt"), "r") as f:
                     chat_reduce_strict = f.read()
                 return make_response(jsonify({"content": chat_reduce_strict}), 200)
-            prompt = prompts_collection.find_one(
-                {"_id": ObjectId(prompt_id), "user": user}
-            )
+            prompt = prompts_collection.find_one({"_id": ObjectId(prompt_id), "user": user})
         except Exception as err:
-            current_app.logger.error(f"Error retrieving prompt: {err}", exc_info=True)
+            current_app.logger.exception(f"Error retrieving prompt: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"content": prompt["content"]}), 200)
 
@@ -1229,6 +1189,9 @@ class DeletePrompt(Resource):
     @api.expect(delete_prompt_model)
     @api.doc(description="Delete a prompt by ID")
     def post(self):
+        from bson.errors import InvalidId
+        from pymongo.errors import PyMongoError
+
         decoded_token = request.decoded_token
         if not decoded_token:
             return make_response(jsonify({"success": False}), 401)
@@ -1240,7 +1203,7 @@ class DeletePrompt(Resource):
             return missing_fields
         try:
             prompts_collection.delete_one({"_id": ObjectId(data["id"]), "user": user})
-        except Exception as err:
+        except (InvalidId, TypeError, PyMongoError) as err:
             current_app.logger.error(f"Error deleting prompt: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
@@ -1253,9 +1216,7 @@ class UpdatePrompt(Resource):
         {
             "id": fields.String(required=True, description="Prompt ID to update"),
             "name": fields.String(required=True, description="New name of the prompt"),
-            "content": fields.String(
-                required=True, description="New content of the prompt"
-            ),
+            "content": fields.String(required=True, description="New content of the prompt"),
         },
     )
 
@@ -1276,7 +1237,7 @@ class UpdatePrompt(Resource):
                 {"_id": ObjectId(data["id"]), "user": user},
                 {"$set": {"name": data["name"], "content": data["content"]}},
             )
-        except Exception as err:
+        except (InvalidId, PyMongoError) as err:
             current_app.logger.error(f"Error updating prompt: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
@@ -1293,9 +1254,7 @@ class GetAgent(Resource):
             return {"success": False, "message": "ID required"}, 400
 
         try:
-            agent = agents_collection.find_one(
-                {"_id": ObjectId(agent_id), "user": decoded_token["sub"]}
-            )
+            agent = agents_collection.find_one({"_id": ObjectId(agent_id), "user": decoded_token["sub"]})
             if not agent:
                 return {"status": "Not found"}, 404
 
@@ -1303,13 +1262,10 @@ class GetAgent(Resource):
                 "id": str(agent["_id"]),
                 "name": agent["name"],
                 "description": agent.get("description", ""),
-                "image": (
-                    generate_image_url(agent["image"]) if agent.get("image") else ""
-                ),
+                "image": (generate_image_url(agent["image"]) if agent.get("image") else ""),
                 "source": (
                     str(source_doc["_id"])
-                    if isinstance(agent.get("source"), DBRef)
-                    and (source_doc := db.dereference(agent.get("source")))
+                    if isinstance(agent.get("source"), DBRef) and (source_doc := db.dereference(agent.get("source")))
                     else ""
                 ),
                 "chunks": agent["chunks"],
@@ -1323,11 +1279,7 @@ class GetAgent(Resource):
                 "created_at": agent.get("createdAt", ""),
                 "updated_at": agent.get("updatedAt", ""),
                 "last_used_at": agent.get("lastUsedAt", ""),
-                "key": (
-                    f"{agent['key'][:4]}...{agent['key'][-4:]}"
-                    if "key" in agent
-                    else ""
-                ),
+                "key": (f"{key[:4]}...{key[-4:]}" if (key := agent.get("key", "")) else ""),
                 "pinned": agent.get("pinned", False),
                 "shared": agent.get("shared_publicly", False),
                 "shared_metadata": agent.get("shared_metadata", {}),
@@ -1336,7 +1288,7 @@ class GetAgent(Resource):
             return make_response(jsonify(data), 200)
 
         except Exception as e:
-            current_app.logger.error(f"Agent fetch error: {e}", exc_info=True)
+            current_app.logger.error("Agent fetch error: %s", e, exc_info=True)
             return {"success": False}, 400
 
 
@@ -1358,9 +1310,7 @@ class GetAgents(Resource):
                     "id": str(agent["_id"]),
                     "name": agent["name"],
                     "description": agent.get("description", ""),
-                    "image": (
-                        generate_image_url(agent["image"]) if agent.get("image") else ""
-                    ),
+                    "image": (generate_image_url(agent["image"]) if agent.get("image") else ""),
                     "source": (
                         str(source_doc["_id"])
                         if isinstance(agent.get("source"), DBRef)
@@ -1378,11 +1328,7 @@ class GetAgents(Resource):
                     "created_at": agent.get("createdAt", ""),
                     "updated_at": agent.get("updatedAt", ""),
                     "last_used_at": agent.get("lastUsedAt", ""),
-                    "key": (
-                        f"{agent['key'][:4]}...{agent['key'][-4:]}"
-                        if "key" in agent
-                        else ""
-                    ),
+                    "key": (f"{key[:4]}...{key[-4:]}" if (key := agent.get("key", "")) else ""),
                     "pinned": str(agent["_id"]) in pinned_ids,
                     "shared": agent.get("shared_publicly", False),
                     "shared_metadata": agent.get("shared_metadata", {}),
@@ -1392,7 +1338,7 @@ class GetAgents(Resource):
                 if "source" in agent or "retriever" in agent
             ]
         except Exception as err:
-            current_app.logger.error(f"Error retrieving agents: {err}", exc_info=True)
+            current_app.logger.error("Error retrieving agents: %s", err, exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify(list_agents), 200)
 
@@ -1403,26 +1349,16 @@ class CreateAgent(Resource):
         "CreateAgentModel",
         {
             "name": fields.String(required=True, description="Name of the agent"),
-            "description": fields.String(
-                required=True, description="Description of the agent"
-            ),
-            "image": fields.Raw(
-                required=False, description="Image file upload", type="file"
-            ),
+            "description": fields.String(required=True, description="Description of the agent"),
+            "image": fields.Raw(required=False, description="Image file upload", type="file"),
             "source": fields.String(required=True, description="Source ID"),
             "chunks": fields.Integer(required=True, description="Chunks count"),
             "retriever": fields.String(required=True, description="Retriever ID"),
             "prompt_id": fields.String(required=True, description="Prompt ID"),
-            "tools": fields.List(
-                fields.String, required=False, description="List of tool identifiers"
-            ),
+            "tools": fields.List(fields.String, required=False, description="List of tool identifiers"),
             "agent_type": fields.String(required=True, description="Type of the agent"),
-            "status": fields.String(
-                required=True, description="Status of the agent (draft or published)"
-            ),
-            "json_schema": fields.Raw(
-                required=False, description="JSON schema for enforcing structured output format"
-            ),
+            "status": fields.String(required=True, description="Status of the agent (draft or published)"),
+            "json_schema": fields.Raw(required=False, description="JSON schema for enforcing structured output format"),
         },
     )
 
@@ -1450,25 +1386,23 @@ class CreateAgent(Resource):
 
         # Validate JSON schema if provided
         if data.get("json_schema"):
-            try:
-                # Basic validation - ensure it's a valid JSON structure
-                json_schema = data.get("json_schema")
-                if not isinstance(json_schema, dict):
-                    return make_response(
-                        jsonify({"success": False, "message": "JSON schema must be a valid JSON object"}),
-                        400
-                    )
-
-                # Validate that it has either a 'schema' property or is itself a schema
-                if "schema" not in json_schema and "type" not in json_schema:
-                    return make_response(
-                        jsonify({"success": False, "message": "JSON schema must contain either a 'schema' property or be a valid JSON schema with 'type' property"}),
-                        400
-                    )
-            except Exception as e:
+            # Basic validation - ensure it's a valid JSON structure
+            json_schema = data.get("json_schema")
+            if not isinstance(json_schema, dict):
                 return make_response(
-                    jsonify({"success": False, "message": f"Invalid JSON schema: {str(e)}"}),
-                    400
+                    jsonify({"success": False, "message": "JSON schema must be a valid JSON object"}), 400
+                )
+
+            # Validate that it has either a 'schema' property or is itself a schema
+            if "schema" not in json_schema and "type" not in json_schema:
+                return make_response(
+                    jsonify(
+                        {
+                            "success": False,
+                            "message": "JSON schema must contain either a 'schema' property or be a valid JSON schema with 'type' property",
+                        }
+                    ),
+                    400,
                 )
 
         if data.get("status") not in ["draft", "published"]:
@@ -1505,9 +1439,7 @@ class CreateAgent(Resource):
 
         image_url, error = handle_image_upload(request, "", user, storage)
         if error:
-            return make_response(
-                jsonify({"success": False, "message": "Image upload failed"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Image upload failed"}), 400)
 
         try:
             key = str(uuid.uuid4()) if data.get("status") == "published" else ""
@@ -1517,9 +1449,7 @@ class CreateAgent(Resource):
                 "description": data.get("description", ""),
                 "image": image_url,
                 "source": (
-                    DBRef("sources", ObjectId(data.get("source")))
-                    if ObjectId.is_valid(data.get("source"))
-                    else ""
+                    DBRef("sources", ObjectId(data.get("source"))) if ObjectId.is_valid(data.get("source")) else ""
                 ),
                 "chunks": data.get("chunks", ""),
                 "retriever": data.get("retriever", ""),
@@ -1528,8 +1458,8 @@ class CreateAgent(Resource):
                 "agent_type": data.get("agent_type", ""),
                 "status": data.get("status"),
                 "json_schema": data.get("json_schema"),
-                "createdAt": datetime.datetime.now(datetime.timezone.utc),
-                "updatedAt": datetime.datetime.now(datetime.timezone.utc),
+                "createdAt": datetime.datetime.now(datetime.UTC),
+                "updatedAt": datetime.datetime.now(datetime.UTC),
                 "lastUsedAt": None,
                 "key": key,
             }
@@ -1539,7 +1469,7 @@ class CreateAgent(Resource):
                 new_agent["retriever"] = "classic"
             resp = agents_collection.insert_one(new_agent)
             new_id = str(resp.inserted_id)
-        except Exception as err:
+        except (TypeError, ValueError) as err:
             current_app.logger.error(f"Error creating agent: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"id": new_id, "key": key}), 201)
@@ -1551,26 +1481,16 @@ class UpdateAgent(Resource):
         "UpdateAgentModel",
         {
             "name": fields.String(required=True, description="New name of the agent"),
-            "description": fields.String(
-                required=True, description="New description of the agent"
-            ),
-            "image": fields.String(
-                required=False, description="New image URL or identifier"
-            ),
+            "description": fields.String(required=True, description="New description of the agent"),
+            "image": fields.String(required=False, description="New image URL or identifier"),
             "source": fields.String(required=True, description="Source ID"),
             "chunks": fields.Integer(required=True, description="Chunks count"),
             "retriever": fields.String(required=True, description="Retriever ID"),
             "prompt_id": fields.String(required=True, description="Prompt ID"),
-            "tools": fields.List(
-                fields.String, required=False, description="List of tool identifiers"
-            ),
+            "tools": fields.List(fields.String, required=False, description="List of tool identifiers"),
             "agent_type": fields.String(required=True, description="Type of the agent"),
-            "status": fields.String(
-                required=True, description="Status of the agent (draft or published)"
-            ),
-            "json_schema": fields.Raw(
-                required=False, description="JSON schema for enforcing structured output format"
-            ),
+            "status": fields.String(required=True, description="Status of the agent (draft or published)"),
+            "json_schema": fields.Raw(required=False, description="JSON schema for enforcing structured output format"),
         },
     )
 
@@ -1596,36 +1516,26 @@ class UpdateAgent(Resource):
                     data["json_schema"] = None
 
         if not ObjectId.is_valid(agent_id):
-            return make_response(
-                jsonify({"success": False, "message": "Invalid agent ID format"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Invalid agent ID format"}), 400)
         oid = ObjectId(agent_id)
 
         try:
             existing_agent = agents_collection.find_one({"_id": oid, "user": user})
-        except Exception as err:
+        except PyMongoError as err:
             return make_response(
-                current_app.logger.error(
-                    f"Error finding agent {agent_id}: {err}", exc_info=True
-                ),
+                current_app.logger.exception(f"Error finding agent {agent_id}: {err}"),
                 jsonify({"success": False, "message": "Database error finding agent"}),
                 500,
             )
         if not existing_agent:
             return make_response(
-                jsonify(
-                    {"success": False, "message": "Agent not found or not authorized"}
-                ),
+                jsonify({"success": False, "message": "Agent not found or not authorized"}),
                 404,
             )
 
-        image_url, error = handle_image_upload(
-            request, existing_agent.get("image", ""), user, storage
-        )
+        image_url, error = handle_image_upload(request, existing_agent.get("image", ""), user, storage)
         if error:
-            return make_response(
-                jsonify({"success": False, "message": "Image upload failed"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Image upload failed"}), 400)
 
         update_fields = {}
         allowed_fields = [
@@ -1648,9 +1558,7 @@ class UpdateAgent(Resource):
                     new_status = data.get("status")
                     if new_status not in ["draft", "published"]:
                         return make_response(
-                            jsonify(
-                                {"success": False, "message": "Invalid status value"}
-                            ),
+                            jsonify({"success": False, "message": "Invalid status value"}),
                             400,
                         )
                     update_fields[field] = new_status
@@ -1702,9 +1610,7 @@ class UpdateAgent(Resource):
         if image_url:
             update_fields["image"] = image_url
         if not update_fields:
-            return make_response(
-                jsonify({"success": False, "message": "No update data provided"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "No update data provided"}), 400)
         newly_generated_key = None
         final_status = update_fields.get("status", existing_agent.get("status"))
         if final_status == "published":
@@ -1719,12 +1625,9 @@ class UpdateAgent(Resource):
             ]
             missing_published_fields = []
             for req_field in required_published_fields:
-                final_value = update_fields.get(
-                    req_field, existing_agent.get(req_field)
-                )
-                if req_field == "source" and final_value:
-                    if not isinstance(final_value, DBRef):
-                        missing_published_fields.append(req_field)
+                final_value = update_fields.get(req_field, existing_agent.get(req_field))
+                if req_field == "source" and final_value and not isinstance(final_value, DBRef):
+                    missing_published_fields.append(req_field)
             if missing_published_fields:
                 return make_response(
                     jsonify(
@@ -1739,12 +1642,10 @@ class UpdateAgent(Resource):
             if not existing_agent.get("key"):
                 newly_generated_key = str(uuid.uuid4())
                 update_fields["key"] = newly_generated_key
-        update_fields["updatedAt"] = datetime.datetime.now(datetime.timezone.utc)
+        update_fields["updatedAt"] = datetime.datetime.now(datetime.UTC)
 
         try:
-            result = agents_collection.update_one(
-                {"_id": oid, "user": user}, {"$set": update_fields}
-            )
+            result = agents_collection.update_one({"_id": oid, "user": user}, {"$set": update_fields})
 
             if result.matched_count == 0:
                 return make_response(
@@ -1766,10 +1667,8 @@ class UpdateAgent(Resource):
                     ),
                     304,
                 )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error updating agent {agent_id}: {err}", exc_info=True
-            )
+        except PyMongoError as err:
+            current_app.logger.exception(f"Error updating agent {agent_id}: {err}")
             return make_response(
                 jsonify({"success": False, "message": "Database error during update"}),
                 500,
@@ -1797,20 +1696,14 @@ class DeleteAgent(Resource):
         user = decoded_token.get("sub")
         agent_id = request.args.get("id")
         if not agent_id:
-            return make_response(
-                jsonify({"success": False, "message": "ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "ID is required"}), 400)
         try:
-            deleted_agent = agents_collection.find_one_and_delete(
-                {"_id": ObjectId(agent_id), "user": user}
-            )
+            deleted_agent = agents_collection.find_one_and_delete({"_id": ObjectId(agent_id), "user": user})
             if not deleted_agent:
-                return make_response(
-                    jsonify({"success": False, "message": "Agent not found"}), 404
-                )
+                return make_response(jsonify({"success": False, "message": "Agent not found"}), 404)
             deleted_id = str(deleted_agent["_id"])
-        except Exception as err:
-            current_app.logger.error(f"Error deleting agent: {err}", exc_info=True)
+        except (InvalidId, PyMongoError) as err:
+            current_app.logger.exception("Error deleting agent: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"id": deleted_id}), 200)
 
@@ -1834,16 +1727,12 @@ class PinnedAgents(Resource):
 
             pinned_object_ids = [ObjectId(agent_id) for agent_id in pinned_ids]
 
-            pinned_agents_cursor = agents_collection.find(
-                {"_id": {"$in": pinned_object_ids}}
-            )
+            pinned_agents_cursor = agents_collection.find({"_id": {"$in": pinned_object_ids}})
             pinned_agents = list(pinned_agents_cursor)
             existing_ids = {str(agent["_id"]) for agent in pinned_agents}
 
             # Clean up any stale pinned IDs
-            stale_ids = [
-                agent_id for agent_id in pinned_ids if agent_id not in existing_ids
-            ]
+            stale_ids = [agent_id for agent_id in pinned_ids if agent_id not in existing_ids]
             if stale_ids:
                 users_collection.update_one(
                     {"user_id": user_id},
@@ -1855,15 +1744,12 @@ class PinnedAgents(Resource):
                     "id": str(agent["_id"]),
                     "name": agent.get("name", ""),
                     "description": agent.get("description", ""),
-                    "image": (
-                        generate_image_url(agent["image"]) if agent.get("image") else ""
-                    ),
+                    "image": (generate_image_url(agent["image"]) if agent.get("image") else ""),
                     "source": (
-                        str(db.dereference(agent["source"])["_id"])
-                        if "source" in agent
-                        and agent["source"]
-                        and isinstance(agent["source"], DBRef)
-                        and db.dereference(agent["source"]) is not None
+                        str(db.dereference(agent.get("source"))["_id"])
+                        if agent.get("source")
+                        and isinstance(agent.get("source"), DBRef)
+                        and db.dereference(agent.get("source")) is not None
                         else ""
                     ),
                     "chunks": agent.get("chunks", ""),
@@ -1876,18 +1762,14 @@ class PinnedAgents(Resource):
                     "created_at": agent.get("createdAt", ""),
                     "updated_at": agent.get("updatedAt", ""),
                     "last_used_at": agent.get("lastUsedAt", ""),
-                    "key": (
-                        f"{agent['key'][:4]}...{agent['key'][-4:]}"
-                        if "key" in agent
-                        else ""
-                    ),
+                    "key": (f"{agent['key'][:4]}...{agent['key'][-4:]}" if "key" in agent else ""),
                     "pinned": True,
                 }
                 for agent in pinned_agents
                 if "source" in agent or "retriever" in agent
             ]
 
-        except Exception as err:
+        except (TypeError, ValueError, KeyError) as err:
             current_app.logger.error(f"Error retrieving pinned agents: {err}")
             return make_response(jsonify({"success": False}), 400)
 
@@ -1898,6 +1780,9 @@ class PinnedAgents(Resource):
 class PinAgent(Resource):
     @api.doc(params={"id": "ID of the agent"}, description="Pin or unpin an agent")
     def post(self):
+        from bson.errors import InvalidId
+        from pymongo.errors import PyMongoError
+
         decoded_token = request.decoded_token
         if not decoded_token:
             return make_response(jsonify({"success": False}), 401)
@@ -1905,15 +1790,11 @@ class PinAgent(Resource):
         agent_id = request.args.get("id")
 
         if not agent_id:
-            return make_response(
-                jsonify({"success": False, "message": "ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "ID is required"}), 400)
         try:
             agent = agents_collection.find_one({"_id": ObjectId(agent_id)})
             if not agent:
-                return make_response(
-                    jsonify({"success": False, "message": "Agent not found"}), 404
-                )
+                return make_response(jsonify({"success": False, "message": "Agent not found"}), 404)
             user_doc = ensure_user_doc(user_id)
             pinned_list = user_doc.get("agent_preferences", {}).get("pinned", [])
 
@@ -1929,11 +1810,9 @@ class PinAgent(Resource):
                     {"$addToSet": {"agent_preferences.pinned": agent_id}},
                 )
                 action = "pinned"
-        except Exception as err:
-            current_app.logger.error(f"Error pinning/unpinning agent: {err}")
-            return make_response(
-                jsonify({"success": False, "message": "Server error"}), 500
-            )
+        except (InvalidId, PyMongoError) as err:
+            current_app.logger.error("Error pinning/unpinning agent: %s", err)
+            return make_response(jsonify({"success": False, "message": "Server error"}), 500)
         return make_response(jsonify({"success": True, "action": action}), 200)
 
 
@@ -1951,14 +1830,10 @@ class RemoveSharedAgent(Resource):
         agent_id = request.args.get("id")
 
         if not agent_id:
-            return make_response(
-                jsonify({"success": False, "message": "ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "ID is required"}), 400)
 
         try:
-            agent = agents_collection.find_one(
-                {"_id": ObjectId(agent_id), "shared_publicly": True}
-            )
+            agent = agents_collection.find_one({"_id": ObjectId(agent_id), "shared_publicly": True})
             if not agent:
                 return make_response(
                     jsonify({"success": False, "message": "Shared agent not found"}),
@@ -1978,11 +1853,9 @@ class RemoveSharedAgent(Resource):
 
             return make_response(jsonify({"success": True, "action": "removed"}), 200)
 
-        except Exception as err:
-            current_app.logger.error(f"Error removing shared agent: {err}")
-            return make_response(
-                jsonify({"success": False, "message": "Server error"}), 500
-            )
+        except (InvalidId, PyMongoError) as err:
+            current_app.logger.exception("Error removing shared agent: %s", err)
+            return make_response(jsonify({"success": False, "message": "Server error"}), 500)
 
 
 @user_ns.route("/api/shared_agent")
@@ -1997,9 +1870,7 @@ class SharedAgent(Resource):
         shared_token = request.args.get("token")
 
         if not shared_token:
-            return make_response(
-                jsonify({"success": False, "message": "Token or ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Token or ID is required"}), 400)
 
         try:
             query = {
@@ -2018,11 +1889,7 @@ class SharedAgent(Resource):
                 "id": agent_id,
                 "user": shared_agent.get("user", ""),
                 "name": shared_agent.get("name", ""),
-                "image": (
-                    generate_image_url(shared_agent["image"])
-                    if shared_agent.get("image")
-                    else ""
-                ),
+                "image": (generate_image_url(shared_agent["image"]) if shared_agent.get("image") else ""),
                 "description": shared_agent.get("description", ""),
                 "source": (
                     str(source_doc["_id"])
@@ -2065,11 +1932,11 @@ class SharedAgent(Resource):
                         {"$addToSet": {"agent_preferences.shared_with_me": agent_id}},
                     )
 
-            return make_response(jsonify(data), 200)
-
         except Exception as err:
-            current_app.logger.error(f"Error retrieving shared agent: {err}")
+            current_app.logger.error("Error retrieving shared agent: %s", err)
             return make_response(jsonify({"success": False}), 400)
+        else:
+            return make_response(jsonify(data), 200)
 
 
 @user_ns.route("/api/shared_agents")
@@ -2083,14 +1950,10 @@ class SharedAgents(Resource):
             user_id = decoded_token.get("sub")
 
             user_doc = ensure_user_doc(user_id)
-            shared_with_ids = user_doc.get("agent_preferences", {}).get(
-                "shared_with_me", []
-            )
+            shared_with_ids = user_doc.get("agent_preferences", {}).get("shared_with_me", [])
             shared_object_ids = [ObjectId(id) for id in shared_with_ids]
 
-            shared_agents_cursor = agents_collection.find(
-                {"_id": {"$in": shared_object_ids}, "shared_publicly": True}
-            )
+            shared_agents_cursor = agents_collection.find({"_id": {"$in": shared_object_ids}, "shared_publicly": True})
             shared_agents = list(shared_agents_cursor)
 
             found_ids_set = {str(agent["_id"]) for agent in shared_agents}
@@ -2108,9 +1971,7 @@ class SharedAgents(Resource):
                     "id": str(agent["_id"]),
                     "name": agent.get("name", ""),
                     "description": agent.get("description", ""),
-                    "image": (
-                        generate_image_url(agent["image"]) if agent.get("image") else ""
-                    ),
+                    "image": (generate_image_url(agent["image"]) if agent.get("image") else ""),
                     "tools": agent.get("tools", []),
                     "tool_details": resolve_tool_details(agent.get("tools", [])),
                     "agent_type": agent.get("agent_type", ""),
@@ -2126,11 +1987,11 @@ class SharedAgents(Resource):
                 for agent in shared_agents
             ]
 
-            return make_response(jsonify(list_shared_agents), 200)
-
-        except Exception as err:
-            current_app.logger.error(f"Error retrieving shared agents: {err}")
+        except (InvalidId, PyMongoError) as err:
+            current_app.logger.error("Error retrieving shared agents: %s", err)
             return make_response(jsonify({"success": False}), 400)
+        else:
+            return make_response(jsonify(list_shared_agents), 200)
 
 
 @user_ns.route("/api/share_agent")
@@ -2140,12 +2001,8 @@ class ShareAgent(Resource):
             "ShareAgentModel",
             {
                 "id": fields.String(required=True, description="ID of the agent"),
-                "shared": fields.Boolean(
-                    required=True, description="Share or unshare the agent"
-                ),
-                "username": fields.String(
-                    required=False, description="Name of the user"
-                ),
+                "shared": fields.Boolean(required=True, description="Share or unshare the agent"),
+                "username": fields.String(required=False, description="Name of the user"),
             },
         )
     )
@@ -2158,17 +2015,13 @@ class ShareAgent(Resource):
 
         data = request.get_json()
         if not data:
-            return make_response(
-                jsonify({"success": False, "message": "Missing JSON body"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Missing JSON body"}), 400)
         agent_id = data.get("id")
         shared = data.get("shared")
         username = data.get("username", "")
 
         if not agent_id:
-            return make_response(
-                jsonify({"success": False, "message": "ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "ID is required"}), 400)
         if shared is None:
             return make_response(
                 jsonify(
@@ -2180,21 +2033,16 @@ class ShareAgent(Resource):
                 400,
             )
         try:
-            try:
-                agent_oid = ObjectId(agent_id)
-            except Exception:
-                return make_response(
-                    jsonify({"success": False, "message": "Invalid agent ID"}), 400
-                )
+            if not ObjectId.is_valid(agent_id):
+                return make_response(jsonify({"success": False, "message": "Invalid agent ID"}), 400)
+            agent_oid = ObjectId(agent_id)
             agent = agents_collection.find_one({"_id": agent_oid, "user": user})
             if not agent:
-                return make_response(
-                    jsonify({"success": False, "message": "Agent not found"}), 404
-                )
+                return make_response(jsonify({"success": False, "message": "Agent not found"}), 404)
             if shared:
                 shared_metadata = {
                     "shared_by": username,
-                    "shared_at": datetime.datetime.now(datetime.timezone.utc),
+                    "shared_at": datetime.datetime.now(datetime.UTC),
                 }
                 shared_token = secrets.token_urlsafe(32)
                 agents_collection.update_one(
@@ -2213,13 +2061,11 @@ class ShareAgent(Resource):
                     {"$set": {"shared_publicly": shared, "shared_token": None}},
                     {"$unset": {"shared_metadata": ""}},
                 )
-        except Exception as err:
-            current_app.logger.error(f"Error sharing/unsharing agent: {err}")
+        except PyMongoError as err:
+            current_app.logger.error("Error sharing/unsharing agent: %s", err)
             return make_response(jsonify({"success": False, "error": str(err)}), 400)
         shared_token = shared_token if shared else None
-        return make_response(
-            jsonify({"success": True, "shared_token": shared_token}), 200
-        )
+        return make_response(jsonify({"success": True, "shared_token": shared_token}), 200)
 
 
 @user_ns.route("/api/agent_webhook")
@@ -2235,17 +2081,11 @@ class AgentWebhook(Resource):
         user = decoded_token.get("sub")
         agent_id = request.args.get("id")
         if not agent_id:
-            return make_response(
-                jsonify({"success": False, "message": "ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "ID is required"}), 400)
         try:
-            agent = agents_collection.find_one(
-                {"_id": ObjectId(agent_id), "user": user}
-            )
+            agent = agents_collection.find_one({"_id": ObjectId(agent_id), "user": user})
             if not agent:
-                return make_response(
-                    jsonify({"success": False, "message": "Agent not found"}), 404
-                )
+                return make_response(jsonify({"success": False, "message": "Agent not found"}), 404)
             webhook_token = agent.get("incoming_webhook_token")
             if not webhook_token:
                 webhook_token = secrets.token_urlsafe(32)
@@ -2256,16 +2096,12 @@ class AgentWebhook(Resource):
             base_url = settings.API_URL.rstrip("/")
             full_webhook_url = f"{base_url}/api/webhooks/agents/{webhook_token}"
         except Exception as err:
-            current_app.logger.error(
-                f"Error generating webhook URL: {err}", exc_info=True
-            )
+            current_app.logger.exception(f"Error generating webhook URL: {err}")
             return make_response(
                 jsonify({"success": False, "message": "Error generating webhook URL"}),
                 400,
             )
-        return make_response(
-            jsonify({"success": True, "webhook_url": full_webhook_url}), 200
-        )
+        return make_response(jsonify({"success": True, "webhook_url": full_webhook_url}), 200)
 
 
 def require_agent(func):
@@ -2273,19 +2109,11 @@ def require_agent(func):
     def wrapper(*args, **kwargs):
         webhook_token = kwargs.get("webhook_token")
         if not webhook_token:
-            return make_response(
-                jsonify({"success": False, "message": "Webhook token missing"}), 400
-            )
-        agent = agents_collection.find_one(
-            {"incoming_webhook_token": webhook_token}, {"_id": 1}
-        )
+            return make_response(jsonify({"success": False, "message": "Webhook token missing"}), 400)
+        agent = agents_collection.find_one({"incoming_webhook_token": webhook_token}, {"_id": 1})
         if not agent:
-            current_app.logger.warning(
-                f"Webhook attempt with invalid token: {webhook_token}"
-            )
-            return make_response(
-                jsonify({"success": False, "message": "Agent not found"}), 404
-            )
+            current_app.logger.warning("Webhook attempt with invalid token: %s", webhook_token)
+            return make_response(jsonify({"success": False, "message": "Agent not found"}), 404)
         kwargs["agent"] = agent
         kwargs["agent_id_str"] = str(agent["_id"])
         return func(*args, **kwargs)
@@ -2295,15 +2123,20 @@ def require_agent(func):
 
 @user_ns.route("/api/webhooks/agents/<string:webhook_token>")
 class AgentWebhookListener(Resource):
-    method_decorators = [require_agent]
+    method_decorators = (require_agent,)
 
     def _enqueue_webhook_task(self, agent_id_str, payload, source_method):
         if not payload:
             current_app.logger.warning(
-                f"Webhook ({source_method}) received for agent {agent_id_str} with empty payload."
+                "Webhook (%s) received for agent %s with empty payload.",
+                source_method,
+                agent_id_str,
             )
         current_app.logger.info(
-            f"Incoming {source_method} webhook for agent {agent_id_str}. Enqueuing task with payload: {payload}"
+            "Incoming %s webhook for agent %s. Enqueuing task with payload: %s",
+            source_method,
+            agent_id_str,
+            payload,
         )
 
         try:
@@ -2312,17 +2145,21 @@ class AgentWebhookListener(Resource):
                 payload=payload,
             )
             current_app.logger.info(
-                f"Task {task.id} enqueued for agent {agent_id_str} ({source_method})."
+                "Task %s enqueued for agent %s (%s).",
+                task.id,
+                agent_id_str,
+                source_method,
             )
             return make_response(jsonify({"success": True, "task_id": task.id}), 200)
         except Exception as err:
             current_app.logger.error(
-                f"Error enqueuing webhook task ({source_method}) for agent {agent_id_str}: {err}",
+                "Error enqueuing webhook task (%s) for agent %s: %s",
+                source_method,
+                agent_id_str,
+                err,
                 exc_info=True,
             )
-            return make_response(
-                jsonify({"success": False, "message": "Error processing webhook"}), 500
-            )
+            return make_response(jsonify({"success": False, "message": "Error processing webhook"}), 500)
 
     @api.doc(
         description="Webhook listener for agent events (POST). Expects JSON payload, which is used to trigger processing.",
@@ -2354,9 +2191,7 @@ class ShareConversation(Resource):
     share_conversation_model = api.model(
         "ShareConversationModel",
         {
-            "conversation_id": fields.String(
-                required=True, description="Conversation ID"
-            ),
+            "conversation_id": fields.String(required=True, description="Conversation ID"),
             "user": fields.String(description="User ID (optional)"),
             "prompt_id": fields.String(description="Prompt ID (optional)"),
             "chunks": fields.Integer(description="Chunks count (optional)"),
@@ -2377,15 +2212,14 @@ class ShareConversation(Resource):
             return missing_fields
         is_promptable = request.args.get("isPromptable", type=inputs.boolean)
         if is_promptable is None:
-            return make_response(
-                jsonify({"success": False, "message": "isPromptable is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "isPromptable is required"}), 400)
         conversation_id = data["conversation_id"]
 
+        from bson.errors import InvalidId
+        from pymongo.errors import PyMongoError
+
         try:
-            conversation = conversations_collection.find_one(
-                {"_id": ObjectId(conversation_id)}
-            )
+            conversation = conversations_collection.find_one({"_id": ObjectId(conversation_id)})
             if conversation is None:
                 return make_response(
                     jsonify(
@@ -2397,9 +2231,7 @@ class ShareConversation(Resource):
                     404,
                 )
             current_n_queries = len(conversation["queries"])
-            explicit_binary = Binary.from_uuid(
-                uuid.uuid4(), UuidRepresentation.STANDARD
-            )
+            explicit_binary = Binary.from_uuid(uuid.uuid4(), UuidRepresentation.STANDARD)
 
             if is_promptable:
                 prompt_id = data.get("prompt_id", "default")
@@ -2413,9 +2245,7 @@ class ShareConversation(Resource):
                 }
 
                 if "source" in data and ObjectId.is_valid(data["source"]):
-                    new_api_key_data["source"] = DBRef(
-                        "sources", ObjectId(data["source"])
-                    )
+                    new_api_key_data["source"] = DBRef("sources", ObjectId(data["source"]))
                 if "retriever" in data:
                     new_api_key_data["retriever"] = data["retriever"]
                 pre_existing_api_document = agents_collection.find_one(new_api_key_data)
@@ -2423,9 +2253,7 @@ class ShareConversation(Resource):
                     api_uuid = pre_existing_api_document["key"]
                     pre_existing = shared_conversations_collections.find_one(
                         {
-                            "conversation_id": DBRef(
-                                "conversations", ObjectId(conversation_id)
-                            ),
+                            "conversation_id": DBRef("conversations", ObjectId(conversation_id)),
                             "isPromptable": is_promptable,
                             "first_n_queries": current_n_queries,
                             "user": user,
@@ -2471,9 +2299,7 @@ class ShareConversation(Resource):
                     new_api_key_data["name"] = name
 
                     if "source" in data and ObjectId.is_valid(data["source"]):
-                        new_api_key_data["source"] = DBRef(
-                            "sources", ObjectId(data["source"])
-                        )
+                        new_api_key_data["source"] = DBRef("sources", ObjectId(data["source"]))
                     if "retriever" in data:
                         new_api_key_data["retriever"] = data["retriever"]
                     agents_collection.insert_one(new_api_key_data)
@@ -2501,9 +2327,7 @@ class ShareConversation(Resource):
                     )
             pre_existing = shared_conversations_collections.find_one(
                 {
-                    "conversation_id": DBRef(
-                        "conversations", ObjectId(conversation_id)
-                    ),
+                    "conversation_id": DBRef("conversations", ObjectId(conversation_id)),
                     "isPromptable": is_promptable,
                     "first_n_queries": current_n_queries,
                     "user": user,
@@ -2519,29 +2343,24 @@ class ShareConversation(Resource):
                     ),
                     200,
                 )
-            else:
-                shared_conversations_collections.insert_one(
-                    {
-                        "uuid": explicit_binary,
-                        "conversation_id": {
-                            "$ref": "conversations",
-                            "$id": ObjectId(conversation_id),
-                        },
-                        "isPromptable": is_promptable,
-                        "first_n_queries": current_n_queries,
-                        "user": user,
-                    }
-                )
-                return make_response(
-                    jsonify(
-                        {"success": True, "identifier": str(explicit_binary.as_uuid())}
-                    ),
-                    201,
-                )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error sharing conversation: {err}", exc_info=True
+            shared_conversations_collections.insert_one(
+                {
+                    "uuid": explicit_binary,
+                    "conversation_id": {
+                        "$ref": "conversations",
+                        "$id": ObjectId(conversation_id),
+                    },
+                    "isPromptable": is_promptable,
+                    "first_n_queries": current_n_queries,
+                    "user": user,
+                }
             )
+            return make_response(
+                jsonify({"success": True, "identifier": str(explicit_binary.as_uuid())}),
+                201,
+            )
+        except (InvalidId, PyMongoError, KeyError, TypeError, ValueError) as err:
+            current_app.logger.error("Error sharing conversation: %s", err, exc_info=True)
             return make_response(jsonify({"success": False}), 400)
 
 
@@ -2549,18 +2368,13 @@ class ShareConversation(Resource):
 class GetPubliclySharedConversations(Resource):
     @api.doc(description="Get publicly shared conversations by identifier")
     def get(self, identifier: str):
+
         try:
-            query_uuid = Binary.from_uuid(
-                uuid.UUID(identifier), UuidRepresentation.STANDARD
-            )
+            query_uuid = Binary.from_uuid(uuid.UUID(identifier), UuidRepresentation.STANDARD)
             shared = shared_conversations_collections.find_one({"uuid": query_uuid})
             conversation_queries = []
 
-            if (
-                shared
-                and "conversation_id" in shared
-                and isinstance(shared["conversation_id"], DBRef)
-            ):
+            if shared and "conversation_id" in shared and isinstance(shared["conversation_id"], DBRef):
                 conversation_ref = shared["conversation_id"]
                 conversation = db.dereference(conversation_ref)
                 if conversation is None:
@@ -2573,32 +2387,23 @@ class GetPubliclySharedConversations(Resource):
                         ),
                         404,
                     )
-                conversation_queries = conversation["queries"][
-                    : (shared["first_n_queries"])
-                ]
+                conversation_queries = conversation["queries"][: (shared["first_n_queries"])]
 
                 for query in conversation_queries:
-                    if "attachments" in query and query["attachments"]:
+                    if query.get("attachments"):
                         attachment_details = []
                         for attachment_id in query["attachments"]:
                             try:
-                                attachment = attachments_collection.find_one(
-                                    {"_id": ObjectId(attachment_id)}
-                                )
+                                attachment = attachments_collection.find_one({"_id": ObjectId(attachment_id)})
                                 if attachment:
                                     attachment_details.append(
                                         {
                                             "id": str(attachment["_id"]),
-                                            "fileName": attachment.get(
-                                                "filename", "Unknown file"
-                                            ),
+                                            "fileName": attachment.get("filename", "Unknown file"),
                                         }
                                     )
                             except Exception as e:
-                                current_app.logger.error(
-                                    f"Error retrieving attachment {attachment_id}: {e}",
-                                    exc_info=True,
-                                )
+                                current_app.logger.exception(f"Error retrieving attachment {attachment_id}: {e}")
                         query["attachments"] = attachment_details
             else:
                 return make_response(
@@ -2621,9 +2426,7 @@ class GetPubliclySharedConversations(Resource):
                 res["api_key"] = shared["api_key"]
             return make_response(jsonify(res), 200)
         except Exception as err:
-            current_app.logger.error(
-                f"Error getting shared conversation: {err}", exc_info=True
-            )
+            current_app.logger.exception(f"Error getting shared conversation: {err}")
             return make_response(jsonify({"success": False}), 400)
 
 
@@ -2661,16 +2464,12 @@ class GetMessageAnalytics(Resource):
 
         try:
             api_key = (
-                agents_collection.find_one({"_id": ObjectId(api_key_id), "user": user})[
-                    "key"
-                ]
-                if api_key_id
-                else None
+                agents_collection.find_one({"_id": ObjectId(api_key_id), "user": user})["key"] if api_key_id else None
             )
-        except Exception as err:
-            current_app.logger.error(f"Error getting API key: {err}", exc_info=True)
+        except (InvalidId, TypeError, PyMongoError) as err:
+            current_app.logger.exception(f"Error getting API key: {err}")
             return make_response(jsonify({"success": False}), 400)
-        end_date = datetime.datetime.now(datetime.timezone.utc)
+        end_date = datetime.datetime.now(datetime.UTC)
 
         if filter_option == "last_hour":
             start_date = end_date - datetime.timedelta(hours=1)
@@ -2680,20 +2479,12 @@ class GetMessageAnalytics(Resource):
             group_format = "%Y-%m-%d %H:00"
         else:
             if filter_option in ["last_7_days", "last_15_days", "last_30_days"]:
-                filter_days = (
-                    6
-                    if filter_option == "last_7_days"
-                    else 14 if filter_option == "last_15_days" else 29
-                )
+                filter_days = 6 if filter_option == "last_7_days" else 14 if filter_option == "last_15_days" else 29
             else:
-                return make_response(
-                    jsonify({"success": False, "message": "Invalid option"}), 400
-                )
+                return make_response(jsonify({"success": False, "message": "Invalid option"}), 400)
             start_date = end_date - datetime.timedelta(days=filter_days)
             start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_date = end_date.replace(
-                hour=23, minute=59, second=59, microsecond=999999
-            )
+            end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
             group_format = "%Y-%m-%d"
         try:
             match_stage = {
@@ -2706,11 +2497,7 @@ class GetMessageAnalytics(Resource):
             pipeline = [
                 match_stage,
                 {"$unwind": "$queries"},
-                {
-                    "$match": {
-                        "queries.timestamp": {"$gte": start_date, "$lte": end_date}
-                    }
-                },
+                {"$match": {"queries.timestamp": {"$gte": start_date, "$lte": end_date}}},
                 {
                     "$group": {
                         "_id": {
@@ -2738,13 +2525,9 @@ class GetMessageAnalytics(Resource):
             for entry in message_data:
                 daily_messages[entry["_id"]] = entry["count"]
         except Exception as err:
-            current_app.logger.error(
-                f"Error getting message analytics: {err}", exc_info=True
-            )
+            current_app.logger.exception(f"Error getting message analytics: {err}")
             return make_response(jsonify({"success": False}), 400)
-        return make_response(
-            jsonify({"success": True, "messages": daily_messages}), 200
-        )
+        return make_response(jsonify({"success": True, "messages": daily_messages}), 200)
 
 
 @user_ns.route("/api/get_token_analytics")
@@ -2781,16 +2564,12 @@ class GetTokenAnalytics(Resource):
 
         try:
             api_key = (
-                agents_collection.find_one({"_id": ObjectId(api_key_id), "user": user})[
-                    "key"
-                ]
-                if api_key_id
-                else None
+                agents_collection.find_one({"_id": ObjectId(api_key_id), "user": user})["key"] if api_key_id else None
             )
         except Exception as err:
-            current_app.logger.error(f"Error getting API key: {err}", exc_info=True)
+            current_app.logger.exception("Error getting API key: %s", err)
             return make_response(jsonify({"success": False}), 400)
-        end_date = datetime.datetime.now(datetime.timezone.utc)
+        end_date = datetime.datetime.now(datetime.UTC)
 
         if filter_option == "last_hour":
             start_date = end_date - datetime.timedelta(hours=1)
@@ -2805,9 +2584,7 @@ class GetTokenAnalytics(Resource):
                             }
                         }
                     },
-                    "total_tokens": {
-                        "$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}
-                    },
+                    "total_tokens": {"$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}},
                 }
             }
         elif filter_option == "last_24_hour":
@@ -2823,27 +2600,17 @@ class GetTokenAnalytics(Resource):
                             }
                         }
                     },
-                    "total_tokens": {
-                        "$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}
-                    },
+                    "total_tokens": {"$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}},
                 }
             }
         else:
             if filter_option in ["last_7_days", "last_15_days", "last_30_days"]:
-                filter_days = (
-                    6
-                    if filter_option == "last_7_days"
-                    else (14 if filter_option == "last_15_days" else 29)
-                )
+                filter_days = 6 if filter_option == "last_7_days" else (14 if filter_option == "last_15_days" else 29)
             else:
-                return make_response(
-                    jsonify({"success": False, "message": "Invalid option"}), 400
-                )
+                return make_response(jsonify({"success": False, "message": "Invalid option"}), 400)
             start_date = end_date - datetime.timedelta(days=filter_days)
             start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_date = end_date.replace(
-                hour=23, minute=59, second=59, microsecond=999999
-            )
+            end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
             group_format = "%Y-%m-%d"
             group_stage = {
                 "$group": {
@@ -2855,9 +2622,7 @@ class GetTokenAnalytics(Resource):
                             }
                         }
                     },
-                    "total_tokens": {
-                        "$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}
-                    },
+                    "total_tokens": {"$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}},
                 }
             }
         try:
@@ -2893,13 +2658,9 @@ class GetTokenAnalytics(Resource):
                 else:
                     daily_token_usage[entry["_id"]["day"]] = entry["total_tokens"]
         except Exception as err:
-            current_app.logger.error(
-                f"Error getting token analytics: {err}", exc_info=True
-            )
+            current_app.logger.error(f"Error getting token analytics: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
-        return make_response(
-            jsonify({"success": True, "token_usage": daily_token_usage}), 200
-        )
+        return make_response(jsonify({"success": True, "token_usage": daily_token_usage}), 200)
 
 
 @user_ns.route("/api/get_feedback_analytics")
@@ -2936,16 +2697,12 @@ class GetFeedbackAnalytics(Resource):
 
         try:
             api_key = (
-                agents_collection.find_one({"_id": ObjectId(api_key_id), "user": user})[
-                    "key"
-                ]
-                if api_key_id
-                else None
+                agents_collection.find_one({"_id": ObjectId(api_key_id), "user": user})["key"] if api_key_id else None
             )
         except Exception as err:
-            current_app.logger.error(f"Error getting API key: {err}", exc_info=True)
+            current_app.logger.exception(f"Error getting API key: {err}")
             return make_response(jsonify({"success": False}), 400)
-        end_date = datetime.datetime.now(datetime.timezone.utc)
+        end_date = datetime.datetime.now(datetime.UTC)
 
         if filter_option == "last_hour":
             start_date = end_date - datetime.timedelta(hours=1)
@@ -2967,20 +2724,12 @@ class GetFeedbackAnalytics(Resource):
             }
         else:
             if filter_option in ["last_7_days", "last_15_days", "last_30_days"]:
-                filter_days = (
-                    6
-                    if filter_option == "last_7_days"
-                    else (14 if filter_option == "last_15_days" else 29)
-                )
+                filter_days = 6 if filter_option == "last_7_days" else (14 if filter_option == "last_15_days" else 29)
             else:
-                return make_response(
-                    jsonify({"success": False, "message": "Invalid option"}), 400
-                )
+                return make_response(jsonify({"success": False, "message": "Invalid option"}), 400)
             start_date = end_date - datetime.timedelta(days=filter_days)
             start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_date = end_date.replace(
-                hour=23, minute=59, second=59, microsecond=999999
-            )
+            end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
             group_format = "%Y-%m-%d"
             date_field = {
                 "$dateToString": {
@@ -3044,23 +2793,17 @@ class GetFeedbackAnalytics(Resource):
                 intervals = generate_hourly_range(start_date, end_date)
             else:
                 intervals = generate_date_range(start_date, end_date)
-            daily_feedback = {
-                interval: {"positive": 0, "negative": 0} for interval in intervals
-            }
+            daily_feedback = {interval: {"positive": 0, "negative": 0} for interval in intervals}
 
             for entry in feedback_data:
                 daily_feedback[entry["_id"]] = {
                     "positive": entry["positive"],
                     "negative": entry["negative"],
                 }
-        except Exception as err:
-            current_app.logger.error(
-                f"Error getting feedback analytics: {err}", exc_info=True
-            )
+        except (KeyError, TypeError, ValueError) as err:
+            current_app.logger.exception(f"Error getting feedback analytics: {err}")
             return make_response(jsonify({"success": False}), 400)
-        return make_response(
-            jsonify({"success": True, "feedback": daily_feedback}), 200
-        )
+        return make_response(jsonify({"success": True, "feedback": daily_feedback}), 200)
 
 
 @user_ns.route("/api/get_user_logs")
@@ -3096,23 +2839,14 @@ class GetUserLogs(Resource):
         skip = (page - 1) * page_size
 
         try:
-            api_key = (
-                agents_collection.find_one({"_id": ObjectId(api_key_id)})["key"]
-                if api_key_id
-                else None
-            )
-        except Exception as err:
+            api_key = agents_collection.find_one({"_id": ObjectId(api_key_id)})["key"] if api_key_id else None
+        except (KeyError, TypeError, ValueError) as err:
             current_app.logger.error(f"Error getting API key: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         query = {"user": user}
         if api_key:
             query = {"api_key": api_key}
-        items_cursor = (
-            user_logs_collection.find(query)
-            .sort("timestamp", -1)
-            .skip(skip)
-            .limit(page_size + 1)
-        )
+        items_cursor = user_logs_collection.find(query).sort("timestamp", -1).skip(skip).limit(page_size + 1)
         items = list(items_cursor)
 
         results = [
@@ -3161,6 +2895,9 @@ class ManageSync(Resource):
     @api.expect(manage_sync_model)
     @api.doc(description="Manage sync frequency for sources")
     def post(self):
+        from bson.errors import InvalidId
+        from pymongo.errors import PyMongoError
+
         decoded_token = request.decoded_token
         if not decoded_token:
             return make_response(jsonify({"success": False}), 401)
@@ -3174,9 +2911,7 @@ class ManageSync(Resource):
         sync_frequency = data["sync_frequency"]
 
         if sync_frequency not in ["never", "daily", "weekly", "monthly"]:
-            return make_response(
-                jsonify({"success": False, "message": "Invalid frequency"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Invalid frequency"}), 400)
         update_data = {"$set": {"sync_frequency": sync_frequency}}
         try:
             sources_collection.update_one(
@@ -3186,10 +2921,8 @@ class ManageSync(Resource):
                 },
                 update_data,
             )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error updating sync frequency: {err}", exc_info=True
-            )
+        except (InvalidId, PyMongoError, TypeError) as err:
+            current_app.logger.error(f"Error updating sync frequency: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -3199,9 +2932,7 @@ class TextToSpeech(Resource):
     tts_model = api.model(
         "TextToSpeechModel",
         {
-            "text": fields.String(
-                required=True, description="Text to be synthesized as audio"
-            ),
+            "text": fields.String(required=True, description="Text to be synthesized as audio"),
         },
     )
 
@@ -3248,10 +2979,8 @@ class AvailableTools(Resource):
                         "actions": tool_instance.get_actions_metadata(),
                     }
                 )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error getting available tools: {err}", exc_info=True
-            )
+        except (AttributeError, KeyError, TypeError, ValueError) as err:
+            current_app.logger.exception(f"Error getting available tools: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True, "data": tools_metadata}), 200)
 
@@ -3271,7 +3000,7 @@ class GetTools(Resource):
                 tool["id"] = str(tool["_id"])
                 tool.pop("_id")
                 user_tools.append(tool)
-        except Exception as err:
+        except PyMongoError as err:
             current_app.logger.error(f"Error getting user tools: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True, "tools": user_tools}), 200)
@@ -3284,26 +3013,16 @@ class CreateTool(Resource):
             "CreateToolModel",
             {
                 "name": fields.String(required=True, description="Name of the tool"),
-                "displayName": fields.String(
-                    required=True, description="Display name for the tool"
-                ),
-                "description": fields.String(
-                    required=True, description="Tool description"
-                ),
-                "config": fields.Raw(
-                    required=True, description="Configuration of the tool"
-                ),
-                "customName": fields.String(
-                    required=False, description="Custom name for the tool"
-                ),
+                "displayName": fields.String(required=True, description="Display name for the tool"),
+                "description": fields.String(required=True, description="Tool description"),
+                "config": fields.Raw(required=True, description="Configuration of the tool"),
+                "customName": fields.String(required=False, description="Custom name for the tool"),
                 "actions": fields.List(
                     fields.Raw,
                     required=True,
                     description="Actions the tool can perform",
                 ),
-                "status": fields.Boolean(
-                    required=True, description="Status of the tool"
-                ),
+                "status": fields.Boolean(required=True, description="Status of the tool"),
             },
         )
     )
@@ -3330,9 +3049,7 @@ class CreateTool(Resource):
             action["active"] = True
             if "parameters" in action:
                 if "properties" in action["parameters"]:
-                    for param_name, param_details in action["parameters"][
-                        "properties"
-                    ].items():
+                    for param_name, param_details in action["parameters"]["properties"].items():
                         param_details["filled_by_llm"] = True
                         param_details["value"] = ""
             transformed_actions.append(action)
@@ -3349,7 +3066,7 @@ class CreateTool(Resource):
             }
             resp = user_tools_collection.insert_one(new_tool)
             new_id = str(resp.inserted_id)
-        except Exception as err:
+        except PyMongoError as err:
             current_app.logger.error(f"Error creating tool: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"id": new_id}), 200)
@@ -3367,15 +3084,16 @@ class UpdateTool(Resource):
                 "customName": fields.String(description="Custom name for the tool"),
                 "description": fields.String(description="Tool description"),
                 "config": fields.Raw(description="Configuration of the tool"),
-                "actions": fields.List(
-                    fields.Raw, description="Actions the tool can perform"
-                ),
+                "actions": fields.List(fields.Raw, description="Actions the tool can perform"),
                 "status": fields.Boolean(description="Status of the tool"),
             },
         )
     )
     @api.doc(description="Update a tool by ID")
     def post(self):
+        from bson.errors import InvalidId
+        from pymongo.errors import PyMongoError
+
         decoded_token = request.decoded_token
         if not decoded_token:
             return make_response(jsonify({"success": False}), 401)
@@ -3418,7 +3136,7 @@ class UpdateTool(Resource):
                 {"_id": ObjectId(data["id"]), "user": user},
                 {"$set": update_data},
             )
-        except Exception as err:
+        except (AttributeError, InvalidId, PyMongoError, TypeError, ValueError) as err:
             current_app.logger.error(f"Error updating tool: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
@@ -3431,14 +3149,15 @@ class UpdateToolConfig(Resource):
             "UpdateToolConfigModel",
             {
                 "id": fields.String(required=True, description="Tool ID"),
-                "config": fields.Raw(
-                    required=True, description="Configuration of the tool"
-                ),
+                "config": fields.Raw(required=True, description="Configuration of the tool"),
             },
         )
     )
     @api.doc(description="Update the configuration of a tool")
     def post(self):
+        from bson.errors import InvalidDocument, InvalidId
+        from pymongo.errors import PyMongoError
+
         decoded_token = request.decoded_token
         if not decoded_token:
             return make_response(jsonify({"success": False}), 401)
@@ -3453,10 +3172,8 @@ class UpdateToolConfig(Resource):
                 {"_id": ObjectId(data["id"]), "user": user},
                 {"$set": {"config": data["config"]}},
             )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error updating tool config: {err}", exc_info=True
-            )
+        except (InvalidDocument, InvalidId, PyMongoError, TypeError) as err:
+            current_app.logger.exception(f"Error updating tool config: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -3478,6 +3195,9 @@ class UpdateToolActions(Resource):
     )
     @api.doc(description="Update the actions of a tool")
     def post(self):
+        from bson.errors import InvalidId
+        from pymongo.errors import PyMongoError
+
         decoded_token = request.decoded_token
         if not decoded_token:
             return make_response(jsonify({"success": False}), 401)
@@ -3492,10 +3212,8 @@ class UpdateToolActions(Resource):
                 {"_id": ObjectId(data["id"]), "user": user},
                 {"$set": {"actions": data["actions"]}},
             )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error updating tool actions: {err}", exc_info=True
-            )
+        except (InvalidId, PyMongoError, TypeError) as err:
+            current_app.logger.error(f"Error updating tool actions: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -3507,14 +3225,15 @@ class UpdateToolStatus(Resource):
             "UpdateToolStatusModel",
             {
                 "id": fields.String(required=True, description="Tool ID"),
-                "status": fields.Boolean(
-                    required=True, description="Status of the tool"
-                ),
+                "status": fields.Boolean(required=True, description="Status of the tool"),
             },
         )
     )
     @api.doc(description="Update the status of a tool")
     def post(self):
+        from bson.errors import InvalidId
+        from pymongo.errors import PyMongoError
+
         decoded_token = request.decoded_token
         if not decoded_token:
             return make_response(jsonify({"success": False}), 401)
@@ -3529,10 +3248,8 @@ class UpdateToolStatus(Resource):
                 {"_id": ObjectId(data["id"]), "user": user},
                 {"$set": {"status": data["status"]}},
             )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error updating tool status: {err}", exc_info=True
-            )
+        except (InvalidId, TypeError, PyMongoError) as err:
+            current_app.logger.error(f"Error updating tool status: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -3547,6 +3264,9 @@ class DeleteTool(Resource):
     )
     @api.doc(description="Delete a tool by ID")
     def post(self):
+        from bson.errors import InvalidId
+        from pymongo.errors import PyMongoError
+
         decoded_token = request.decoded_token
         if not decoded_token:
             return make_response(jsonify({"success": False}), 401)
@@ -3557,12 +3277,10 @@ class DeleteTool(Resource):
         if missing_fields:
             return missing_fields
         try:
-            result = user_tools_collection.delete_one(
-                {"_id": ObjectId(data["id"]), "user": user}
-            )
+            result = user_tools_collection.delete_one({"_id": ObjectId(data["id"]), "user": user})
             if result.deleted_count == 0:
                 return {"success": False, "message": "Tool not found"}, 404
-        except Exception as err:
+        except (InvalidId, TypeError, PyMongoError) as err:
             current_app.logger.error(f"Error deleting tool: {err}", exc_info=True)
             return {"success": False}, 400
         return {"success": True}, 200
@@ -3577,7 +3295,7 @@ class GetChunks(Resource):
             "page": "Page number for pagination",
             "per_page": "Number of chunks per page",
             "path": "Optional: Filter chunks by relative file path",
-            "search": "Optional: Search term to filter chunks by title or content"
+            "search": "Optional: Search term to filter chunks by title or content",
         },
     )
     def get(self):
@@ -3595,9 +3313,7 @@ class GetChunks(Resource):
             return make_response(jsonify({"error": "Invalid doc_id"}), 400)
         doc = sources_collection.find_one({"_id": ObjectId(doc_id), "user": user})
         if not doc:
-            return make_response(
-                jsonify({"error": "Document not found or access denied"}), 404
-            )
+            return make_response(jsonify({"error": "Document not found or access denied"}), 404)
         try:
             store = get_vector_store(doc_id)
             chunks = store.get_chunks()
@@ -3638,14 +3354,15 @@ class GetChunks(Resource):
                         "total": total_chunks,
                         "chunks": paginated_chunks,
                         "path": path if path else None,
-                        "search": search_term if search_term else None
+                        "search": search_term if search_term else None,
                     }
                 ),
                 200,
             )
-        except Exception as e:
+        except (AttributeError, KeyError, OSError, RuntimeError, TypeError, ValueError) as e:
             current_app.logger.error(f"Error getting chunks: {e}", exc_info=True)
             return make_response(jsonify({"success": False}), 500)
+
 
 @user_ns.route("/api/add_chunk")
 class AddChunk(Resource):
@@ -3685,9 +3402,7 @@ class AddChunk(Resource):
             return make_response(jsonify({"error": "Invalid doc_id"}), 400)
         doc = sources_collection.find_one({"_id": ObjectId(doc_id), "user": user})
         if not doc:
-            return make_response(
-                jsonify({"error": "Document not found or access denied"}), 404
-            )
+            return make_response(jsonify({"error": "Document not found or access denied"}), 404)
         try:
             store = get_vector_store(doc_id)
             chunk_id = store.add_chunk(text, metadata)
@@ -3695,7 +3410,7 @@ class AddChunk(Resource):
                 jsonify({"message": "Chunk added successfully", "chunk_id": chunk_id}),
                 201,
             )
-        except Exception as e:
+        except (ValueError, RuntimeError) as e:
             current_app.logger.error(f"Error adding chunk: {e}", exc_info=True)
             return make_response(jsonify({"success": False}), 500)
 
@@ -3718,22 +3433,18 @@ class DeleteChunk(Resource):
             return make_response(jsonify({"error": "Invalid doc_id"}), 400)
         doc = sources_collection.find_one({"_id": ObjectId(doc_id), "user": user})
         if not doc:
-            return make_response(
-                jsonify({"error": "Document not found or access denied"}), 404
-            )
+            return make_response(jsonify({"error": "Document not found or access denied"}), 404)
         try:
             store = get_vector_store(doc_id)
             deleted = store.delete_chunk(chunk_id)
             if deleted:
-                return make_response(
-                    jsonify({"message": "Chunk deleted successfully"}), 200
-                )
+                return make_response(jsonify({"message": "Chunk deleted successfully"}), 200)
             else:
                 return make_response(
                     jsonify({"message": "Chunk not found or could not be deleted"}),
                     404,
                 )
-        except Exception as e:
+        except (ValueError, RuntimeError) as e:
             current_app.logger.error(f"Error deleting chunk: {e}", exc_info=True)
             return make_response(jsonify({"success": False}), 500)
 
@@ -3745,12 +3456,8 @@ class UpdateChunk(Resource):
             "UpdateChunkModel",
             {
                 "id": fields.String(required=True, description="Document ID"),
-                "chunk_id": fields.String(
-                    required=True, description="Chunk ID to update"
-                ),
-                "text": fields.String(
-                    required=False, description="New text of the chunk"
-                ),
+                "chunk_id": fields.String(required=True, description="Chunk ID to update"),
+                "text": fields.String(required=False, description="New text of the chunk"),
                 "metadata": fields.Raw(
                     required=False,
                     description="Updated metadata associated with the chunk",
@@ -3786,9 +3493,7 @@ class UpdateChunk(Resource):
             return make_response(jsonify({"error": "Invalid doc_id"}), 400)
         doc = sources_collection.find_one({"_id": ObjectId(doc_id), "user": user})
         if not doc:
-            return make_response(
-                jsonify({"error": "Document not found or access denied"}), 404
-            )
+            return make_response(jsonify({"error": "Document not found or access denied"}), 404)
         try:
             store = get_vector_store(doc_id)
 
@@ -3813,7 +3518,9 @@ class UpdateChunk(Resource):
 
                 deleted = store.delete_chunk(chunk_id)
                 if not deleted:
-                    current_app.logger.warning(f"Failed to delete old chunk {chunk_id}, but new chunk {new_chunk_id} was created")
+                    current_app.logger.warning(
+                        f"Failed to delete old chunk {chunk_id}, but new chunk {new_chunk_id} was created"
+                    )
 
                 return make_response(
                     jsonify(
@@ -3825,12 +3532,10 @@ class UpdateChunk(Resource):
                     ),
                     200,
                 )
-            except Exception as add_error:
+            except (ValueError, RuntimeError) as add_error:
                 current_app.logger.error(f"Failed to add updated chunk: {add_error}")
-                return make_response(
-                    jsonify({"error": "Failed to update chunk - addition failed"}), 500
-                )
-        except Exception as e:
+                return make_response(jsonify({"error": "Failed to update chunk - addition failed"}), 500)
+        except (KeyError, TypeError, ValueError) as e:
             current_app.logger.error(f"Error updating chunk: {e}", exc_info=True)
             return make_response(jsonify({"success": False}), 500)
 
@@ -3842,9 +3547,7 @@ class StoreAttachment(Resource):
             "AttachmentModel",
             {
                 "file": fields.Raw(required=True, description="File to upload"),
-                "api_key": fields.String(
-                    required=False, description="API key (optional)"
-                ),
+                "api_key": fields.String(required=False, description="API key (optional)"),
             },
         )
     )
@@ -3868,19 +3571,15 @@ class StoreAttachment(Resource):
         elif api_key:
             agent = agents_collection.find_one({"key": api_key})
             if not agent:
-                return make_response(
-                    jsonify({"success": False, "message": "Invalid API key"}), 401
-                )
+                return make_response(jsonify({"success": False, "message": "Invalid API key"}), 401)
             user = safe_filename(agent.get("user"))
         else:
-            return make_response(
-                jsonify({"success": False, "message": "Authentication required"}), 401
-            )
+            return make_response(jsonify({"success": False, "message": "Authentication required"}), 401)
 
         try:
             attachment_id = ObjectId()
             original_filename = safe_filename(os.path.basename(file.filename))
-            relative_path = f"{settings.UPLOAD_FOLDER}/{user}/attachments/{str(attachment_id)}/{original_filename}"
+            relative_path = f"{settings.UPLOAD_FOLDER}/{user}/attachments/{attachment_id!s}/{original_filename}"
 
             metadata = storage.save_file(file, relative_path)
 
@@ -3904,7 +3603,7 @@ class StoreAttachment(Resource):
                 200,
             )
         except Exception as err:
-            current_app.logger.error(f"Error storing attachment: {err}", exc_info=True)
+            current_app.logger.exception(f"Error storing attachment: {err}")
             return make_response(jsonify({"success": False, "error": str(err)}), 400)
 
 
@@ -3925,14 +3624,10 @@ class ServeImage(Resource):
 
             return response
         except FileNotFoundError:
-            return make_response(
-                jsonify({"success": False, "message": "Image not found"}), 404
-            )
-        except Exception as e:
+            return make_response(jsonify({"success": False, "message": "Image not found"}), 404)
+        except OSError as e:
             current_app.logger.error(f"Error serving image: {e}")
-            return make_response(
-                jsonify({"success": False, "message": "Error retrieving image"}), 500
-            )
+            return make_response(jsonify({"success": False, "message": "Error retrieving image"}), 500)
 
 
 @user_ns.route("/api/directory_structure")
@@ -3950,9 +3645,7 @@ class DirectoryStructure(Resource):
         doc_id = request.args.get("id")
 
         if not doc_id:
-            return make_response(
-                jsonify({"error": "Document ID is required"}), 400
-            )
+            return make_response(jsonify({"error": "Document ID is required"}), 400)
 
         if not ObjectId.is_valid(doc_id):
             return make_response(jsonify({"error": "Invalid document ID"}), 400)
@@ -3960,9 +3653,7 @@ class DirectoryStructure(Resource):
         try:
             doc = sources_collection.find_one({"_id": ObjectId(doc_id), "user": user})
             if not doc:
-                return make_response(
-                    jsonify({"error": "Document not found or access denied"}), 404
-                )
+                return make_response(jsonify({"error": "Document not found or access denied"}), 404)
 
             directory_structure = doc.get("directory_structure", {})
             base_path = doc.get("file_path", "")
@@ -3974,25 +3665,20 @@ class DirectoryStructure(Resource):
                     remote_data_obj = json.loads(remote_data)
                     provider = remote_data_obj.get("provider")
             except Exception as e:
-                current_app.logger.warning(
-                    f"Failed to parse remote_data for doc {doc_id}: {e}")
+                current_app.logger.warning(f"Failed to parse remote_data for doc {doc_id}: {e}")
 
             return make_response(
-                jsonify({
-                    "success": True,
-                    "directory_structure": directory_structure,
-                    "base_path": base_path,
-                    "provider": provider,
-                }), 200
+                jsonify(
+                    {
+                        "success": True,
+                        "directory_structure": directory_structure,
+                        "base_path": base_path,
+                        "provider": provider,
+                    }
+                ),
+                200,
             )
 
-        except Exception as e:
-            current_app.logger.error(
-                f"Error retrieving directory structure: {e}", exc_info=True
-            )
-            return make_response(
-                jsonify({"success": False, "error": str(e)}), 500
-            )
-
-
-
+        except (KeyError, TypeError, ValueError) as e:
+            current_app.logger.error(f"Error retrieving directory structure: {e}", exc_info=True)
+            return make_response(jsonify({"success": False, "error": str(e)}), 500)

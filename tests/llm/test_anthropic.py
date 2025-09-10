@@ -1,9 +1,10 @@
 import unittest
-from unittest.mock import patch, Mock
+from unittest.mock import Mock, patch
+
 from application.llm.anthropic import AnthropicLLM
 
-class TestAnthropicLLM(unittest.TestCase):
 
+class TestAnthropicLLM(unittest.TestCase):
     def setUp(self):
         self.api_key = "TEST_API_KEY"
         self.llm = AnthropicLLM(api_key=self.api_key)
@@ -15,10 +16,7 @@ class TestAnthropicLLM(unittest.TestCase):
         self.assertEqual(llm.api_key, "DEFAULT_API_KEY")
 
     def test_gen(self):
-        messages = [
-            {"content": "context"},
-            {"content": "question"}
-        ]
+        messages = [{"content": "context"}, {"content": "question"}]
         mock_response = Mock()
         mock_response.completion = "test completion"
 
@@ -36,15 +34,12 @@ class TestAnthropicLLM(unittest.TestCase):
                     model="test_model",
                     max_tokens_to_sample=300,
                     stream=False,
-                    prompt=f"{self.llm.HUMAN_PROMPT} {prompt_expected}{self.llm.AI_PROMPT}"
+                    prompt=f"{self.llm.HUMAN_PROMPT} {prompt_expected}{self.llm.AI_PROMPT}",
                 )
             mock_redis_instance.set.assert_called_once()
 
     def test_gen_stream(self):
-        messages = [
-            {"content": "context"},
-            {"content": "question"}
-        ]
+        messages = [{"content": "context"}, {"content": "question"}]
         mock_responses = [Mock(completion="response_1"), Mock(completion="response_2")]
         mock_tools = Mock()
 
@@ -53,7 +48,9 @@ class TestAnthropicLLM(unittest.TestCase):
             mock_redis_instance.get.return_value = None
             mock_redis_instance.set = Mock()
 
-            with patch.object(self.llm.anthropic.completions, "create", return_value=iter(mock_responses)) as mock_create:
+            with patch.object(
+                self.llm.anthropic.completions, "create", return_value=iter(mock_responses)
+            ) as mock_create:
                 responses = list(self.llm.gen_stream("test_model", messages, tools=mock_tools))
                 self.assertListEqual(responses, ["response_1", "response_2"])
 
@@ -62,7 +59,9 @@ class TestAnthropicLLM(unittest.TestCase):
                     model="test_model",
                     prompt=f"{self.llm.HUMAN_PROMPT} {prompt_expected}{self.llm.AI_PROMPT}",
                     max_tokens_to_sample=300,
-                    stream=True
+                    stream=True,
                 )
+
+
 if __name__ == "__main__":
     unittest.main()
