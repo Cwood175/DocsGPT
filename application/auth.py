@@ -3,7 +3,9 @@ from jose import jwt
 from application.core.settings import settings
 
 
-def handle_auth(request, data={}):
+def handle_auth(request, data=None):
+    if data is None:
+        data = {}
     if settings.AUTH_TYPE in ["simple_jwt", "session_jwt"]:
         jwt_token = request.headers.get("Authorization")
         if not jwt_token:
@@ -19,9 +21,9 @@ def handle_auth(request, data={}):
                 options={"verify_exp": False},
             )
             return decoded_token
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             return {
-                "message": f"Authentication error: {str(e)}",
+                "message": f"Authentication error: {e!s}",
                 "error": "invalid_token",
             }
     else:

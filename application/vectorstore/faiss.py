@@ -1,13 +1,13 @@
+import io
 import os
 import tempfile
-import io
 
 from langchain_community.vectorstores import FAISS
 
 from application.core.settings import settings
 from application.parser.schema.base import Document
-from application.vectorstore.base import BaseVectorStore
 from application.storage.storage_creator import StorageCreator
+from application.vectorstore.base import BaseVectorStore
 
 
 def get_vectorstore(path: str) -> str:
@@ -56,8 +56,8 @@ class FaissStore(BaseVectorStore):
                     self.docsearch = FAISS.load_local(
                         temp_dir, self.embeddings, allow_dangerous_deserialization=True
                     )
-        except Exception as e:
-            raise Exception(f"Error loading FAISS index: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            raise RuntimeError(f"Error loading FAISS index: {e!s}") from e
 
         self.assert_embedding_dimensions(self.embeddings)
 

@@ -1,11 +1,15 @@
 import json
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
 from application.agents.tools.base import Tool
 from application.security.encryption import decrypt_credentials
+
+
+class MCPError(Exception):
+    """Raised when communication with an MCP server fails."""
 
 
 _mcp_session_cache = {}
@@ -17,7 +21,7 @@ class MCPTool(Tool):
     Connect to remote Model Context Protocol (MCP) servers to access dynamic tools and resources. Supports various authentication methods and provides secure access to external services through the MCP protocol.
     """
 
-    def __init__(self, config: Dict[str, Any], user_id: Optional[str] = None):
+    def __init__(self, config: dict[str, Any], user_id: str | None = None):
         """
         Initialize the MCP Tool with configuration.
 
@@ -80,10 +84,8 @@ class MCPTool(Tool):
             auth_key = "none"
         return f"{self.server_url}#{auth_key}"
 
-    def _get_cached_session(self) -> Optional[str]:
+    def _get_cached_session(self) -> str | None:
         """Get cached session ID if available and not expired."""
-        global _mcp_session_cache
-
         if self._cache_key in _mcp_session_cache:
             session_data = _mcp_session_cache[self._cache_key]
             if time.time() - session_data["created_at"] < 1800:
@@ -94,13 +96,12 @@ class MCPTool(Tool):
 
     def _cache_session(self, session_id: str):
         """Cache the session ID for reuse."""
-        global _mcp_session_cache
         _mcp_session_cache[self._cache_key] = {
             "session_id": session_id,
             "created_at": time.time(),
         }
 
-    def _initialize_mcp_connection(self) -> Dict:
+    def _initialize_mcp_connection(self) -> dict:
         """
         Initialize MCP connection with the server, using cached session if available.
 
@@ -121,7 +122,7 @@ class MCPTool(Tool):
             self._make_mcp_request("notifications/initialized")
 
             return response
-        except Exception as e:
+        except (MCPError, requests.exceptions.RequestException) as e:
             return {"error": str(e), "fallback": True}
 
     def _ensure_valid_session(self):
@@ -129,7 +130,7 @@ class MCPTool(Tool):
         if not self._mcp_session_id:
             self._initialize_mcp_connection()
 
-    def _make_mcp_request(self, method: str, params: Optional[Dict] = None) -> Dict:
+    def _make_mcp_request(self, method: str, params: dict | None = None) -> dict:
         """
         Make an MCP protocol request to the server with automatic session recovery.
 
@@ -152,8 +153,8 @@ class MCPTool(Tool):
         return self._execute_mcp_request(mcp_message, method)
 
     def _execute_mcp_request(
-        self, mcp_message: Dict, method: str, is_retry: bool = False
-    ) -> Dict:
+        self, mcp_message: dict, method: str, is_retry: bool = False
+    ) -> dict:
         """Execute MCP request with optional retry on session failure."""
         try:
             final_headers = self._session.headers.copy()
@@ -191,26 +192,26 @@ class MCPTool(Tool):
                 if data_line:
                     try:
                         result = json.loads(data_line)
-                    except json.JSONDecodeError:
-                        raise Exception(f"Invalid JSON in SSE data: {data_line}")
+                    except json.JSONDecodeError as e:
+                        raise MCPError(f"Invalid JSON in SSE data: {data_line}") from e
                 else:
-                    raise Exception(f"No data found in SSE response: {response_text}")
+                    raise MCPError(f"No data found in SSE response: {response_text}")
             else:
                 try:
                     result = response.json()
-                except json.JSONDecodeError:
-                    raise Exception(f"Invalid JSON response: {response.text}")
+                except json.JSONDecodeError as e:
+                    raise MCPError(f"Invalid JSON response: {response.text}") from e
             if "error" in result:
                 error_msg = result["error"]
                 if isinstance(error_msg, dict):
                     error_msg = error_msg.get("message", str(error_msg))
-                raise Exception(f"MCP server error: {error_msg}")
+                raise MCPError(f"MCP server error: {error_msg}")
             return result.get("result", result)
         except requests.exceptions.RequestException as e:
             if not is_retry and self._should_retry_with_new_session(e):
                 self._invalidate_and_refresh_session()
                 return self._execute_mcp_request(mcp_message, method, is_retry=True)
-            raise Exception(f"MCP server request failed: {str(e)}")
+            raise MCPError(f"MCP server request failed: {e!s}") from e
 
     def _should_retry_with_new_session(self, error: Exception) -> bool:
         """Check if error indicates session invalidation and retry is warranted."""
@@ -231,13 +232,12 @@ class MCPTool(Tool):
 
     def _invalidate_and_refresh_session(self) -> None:
         """Invalidate current session and create a new one."""
-        global _mcp_session_cache
         if self._cache_key in _mcp_session_cache:
             del _mcp_session_cache[self._cache_key]
         self._mcp_session_id = None
         self._initialize_mcp_connection()
 
-    def discover_tools(self) -> List[Dict]:
+    def discover_tools(self) -> list[dict]:
         """
         Discover available tools from the MCP server using MCP protocol.
 
@@ -267,8 +267,10 @@ class MCPTool(Tool):
             else:
                 self.available_tools = []
             return self.available_tools
-        except Exception as e:
-            raise Exception(f"Failed to discover tools from MCP server: {str(e)}")
+        except (MCPError, requests.exceptions.RequestException) as e:
+            raise MCPError(
+                f"Failed to discover tools from MCP server: {e!s}"
+            ) from e
 
     def execute_action(self, action_name: str, **kwargs) -> Any:
         """
@@ -294,10 +296,12 @@ class MCPTool(Tool):
         try:
             result = self._make_mcp_request("tools/call", call_params)
             return result
-        except Exception as e:
-            raise Exception(f"Failed to execute action '{action_name}': {str(e)}")
+        except (MCPError, requests.exceptions.RequestException) as e:
+            raise MCPError(
+                f"Failed to execute action '{action_name}': {e!s}"
+            ) from e
 
-    def get_actions_metadata(self) -> List[Dict]:
+    def get_actions_metadata(self) -> list[dict]:
         """
         Get metadata for all available actions.
 
@@ -319,20 +323,19 @@ class MCPTool(Tool):
                 "required": [],
             }
 
-            if input_schema:
-                if isinstance(input_schema, dict):
-                    if "properties" in input_schema:
-                        parameters_schema = {
-                            "type": input_schema.get("type", "object"),
-                            "properties": input_schema.get("properties", {}),
-                            "required": input_schema.get("required", []),
-                        }
+            if input_schema and isinstance(input_schema, dict):
+                if "properties" in input_schema:
+                    parameters_schema = {
+                        "type": input_schema.get("type", "object"),
+                        "properties": input_schema.get("properties", {}),
+                        "required": input_schema.get("required", []),
+                    }
 
-                        for key in ["additionalProperties", "description"]:
-                            if key in input_schema:
-                                parameters_schema[key] = input_schema[key]
-                    else:
-                        parameters_schema["properties"] = input_schema
+                    for key in ["additionalProperties", "description"]:
+                        if key in input_schema:
+                            parameters_schema[key] = input_schema[key]
+                else:
+                    parameters_schema["properties"] = input_schema
             action = {
                 "name": tool.get("name", ""),
                 "description": tool.get("description", ""),
@@ -341,7 +344,7 @@ class MCPTool(Tool):
             actions.append(action)
         return actions
 
-    def test_connection(self) -> Dict:
+    def test_connection(self) -> dict:
         """
         Test the connection to the MCP server and validate functionality.
 
@@ -367,15 +370,15 @@ class MCPTool(Tool):
                 "session_id": self._mcp_session_id,
                 "tools": [tool.get("name", "unknown") for tool in tools[:5]],
             }
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001 - report any failure as a connection test result
             return {
                 "success": False,
-                "message": f"Connection failed: {str(e)}",
+                "message": f"Connection failed: {e!s}",
                 "tools_count": 0,
                 "error_type": type(e).__name__,
             }
 
-    def get_config_requirements(self) -> Dict:
+    def get_config_requirements(self) -> dict:
         return {
             "server_url": {
                 "type": "string",
