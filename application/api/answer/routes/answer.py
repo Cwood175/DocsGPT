@@ -2,15 +2,17 @@ import logging
 import traceback
 
 from flask import make_response, request
-from flask_restx import fields, Resource
+from flask_restx import Resource, fields
 
 from application.api import api
-
-from application.api.answer.routes.base import answer_ns, BaseAnswerResource
-
+from application.api.answer.routes.base import BaseAnswerResource, answer_ns
 from application.api.answer.services.stream_processor import StreamProcessor
 
 logger = logging.getLogger(__name__)
+
+
+def register(api):
+    api.add_namespace(answer_ns)
 
 
 @answer_ns.route("/api/answer")
@@ -22,9 +24,7 @@ class AnswerResource(Resource, BaseAnswerResource):
     answer_model = answer_ns.model(
         "AnswerModel",
         {
-            "question": fields.String(
-                required=True, description="Question to be asked"
-            ),
+            "question": fields.String(required=True, description="Question to be asked"),
             "history": fields.List(
                 fields.String,
                 required=False,
@@ -34,21 +34,13 @@ class AnswerResource(Resource, BaseAnswerResource):
                 required=False,
                 description="Existing conversation ID (loads history)",
             ),
-            "prompt_id": fields.String(
-                required=False, default="default", description="Prompt ID"
-            ),
-            "chunks": fields.Integer(
-                required=False, default=2, description="Number of chunks"
-            ),
+            "prompt_id": fields.String(required=False, default="default", description="Prompt ID"),
+            "chunks": fields.Integer(required=False, default=2, description="Number of chunks"),
             "token_limit": fields.Integer(required=False, description="Token limit"),
             "retriever": fields.String(required=False, description="Retriever type"),
             "api_key": fields.String(required=False, description="API key"),
-            "active_docs": fields.String(
-                required=False, description="Active documents"
-            ),
-            "isNoneDoc": fields.Boolean(
-                required=False, description="Flag indicating if no document is used"
-            ),
+            "active_docs": fields.String(required=False, description="Active documents"),
+            "isNoneDoc": fields.Boolean(required=False, description="Flag indicating if no document is used"),
             "save_conversation": fields.Boolean(
                 required=False,
                 default=True,
@@ -96,9 +88,7 @@ class AnswerResource(Resource, BaseAnswerResource):
                     structured_info,
                 ) = stream_result
             else:
-                conversation_id, response, sources, tool_calls, thought, error = (
-                    stream_result
-                )
+                conversation_id, response, sources, tool_calls, thought, error = stream_result
                 structured_info = None
 
             if error:
@@ -115,7 +105,7 @@ class AnswerResource(Resource, BaseAnswerResource):
                 result.update(structured_info)
         except Exception as e:
             logger.error(
-                f"/api/answer - error: {str(e)} - traceback: {traceback.format_exc()}",
+                f"/api/answer - error: {e!s} - traceback: {traceback.format_exc()}",
                 extra={"error": str(e), "traceback": traceback.format_exc()},
             )
             return make_response({"error": str(e)}, 500)
