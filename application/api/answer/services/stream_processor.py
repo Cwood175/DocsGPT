@@ -3,11 +3,12 @@ import json
 import logging
 import os
 from pathlib import Path
-from typing import Any, Dict, Optional
+from typing import Any
 
 from bson.dbref import DBRef
-
+from bson.errors import InvalidId
 from bson.objectid import ObjectId
+from pymongo.errors import PyMongoError
 
 from application.agents.agent_creator import AgentCreator
 from application.api.answer.services.conversation_service import ConversationService
@@ -49,14 +50,12 @@ def get_prompt(prompt_id: str, prompts_collection=None) -> str:
         if not prompt_doc:
             raise ValueError(f"Prompt with ID {prompt_id} not found")
         return prompt_doc["content"]
-    except Exception as e:
+    except (InvalidId, TypeError, PyMongoError) as e:
         raise ValueError(f"Invalid prompt ID: {prompt_id}") from e
 
 
 class StreamProcessor:
-    def __init__(
-        self, request_data: Dict[str, Any], decoded_token: Optional[Dict[str, Any]]
-    ):
+    def __init__(self, request_data: dict[str, Any], decoded_token: dict[str, Any] | None):
         mongo = MongoDB.get_client()
         self.db = mongo[settings.MONGO_DB_NAME]
         self.agents_collection = self.db["agents"]
@@ -65,9 +64,7 @@ class StreamProcessor:
 
         self.data = request_data
         self.decoded_token = decoded_token
-        self.initial_user_id = (
-            self.decoded_token.get("sub") if self.decoded_token is not None else None
-        )
+        self.initial_user_id = self.decoded_token.get("sub") if self.decoded_token is not None else None
         self.conversation_id = self.data.get("conversation_id")
         self.source = {}
         self.all_sources = []
@@ -92,26 +89,19 @@ class StreamProcessor:
     def _load_conversation_history(self):
         """Load conversation history either from DB or request"""
         if self.conversation_id and self.initial_user_id:
-            conversation = self.conversation_service.get_conversation(
-                self.conversation_id, self.initial_user_id
-            )
+            conversation = self.conversation_service.get_conversation(self.conversation_id, self.initial_user_id)
             if not conversation:
                 raise ValueError("Conversation not found or unauthorized")
             self.history = [
-                {"prompt": query["prompt"], "response": query["response"]}
-                for query in conversation.get("queries", [])
+                {"prompt": query["prompt"], "response": query["response"]} for query in conversation.get("queries", [])
             ]
         else:
-            self.history = limit_chat_history(
-                json.loads(self.data.get("history", "[]")), gpt_model=self.gpt_model
-            )
+            self.history = limit_chat_history(json.loads(self.data.get("history", "[]")), gpt_model=self.gpt_model)
 
     def _process_attachments(self):
         """Process any attachments in the request"""
         attachment_ids = self.data.get("attachments", [])
-        self.attachments = self._get_attachments_content(
-            attachment_ids, self.initial_user_id
-        )
+        self.attachments = self._get_attachments_content(attachment_ids, self.initial_user_id)
 
     def _get_attachments_content(self, attachment_ids, user_id):
         """
@@ -122,51 +112,41 @@ class StreamProcessor:
         attachments = []
         for attachment_id in attachment_ids:
             try:
-                attachment_doc = self.attachments_collection.find_one(
-                    {"_id": ObjectId(attachment_id), "user": user_id}
-                )
+                attachment_doc = self.attachments_collection.find_one({"_id": ObjectId(attachment_id), "user": user_id})
 
                 if attachment_doc:
                     attachments.append(attachment_doc)
-            except Exception as e:
-                logger.error(
-                    f"Error retrieving attachment {attachment_id}: {e}", exc_info=True
-                )
+            except (InvalidId, TypeError, PyMongoError) as e:
+                logger.exception("Error retrieving attachment %s: %s", attachment_id, e)
         return attachments
 
-    def _get_agent_key(self, agent_id: Optional[str], user_id: Optional[str]) -> tuple:
+    def _get_agent_key(self, agent_id: str | None, user_id: str | None) -> tuple:
         """Get API key for agent with access control"""
         if not agent_id:
             return None, False, None
         try:
             agent = self.agents_collection.find_one({"_id": ObjectId(agent_id)})
             if agent is None:
-                raise Exception("Agent not found")
+                raise LookupError("Agent not found")
             is_owner = agent.get("user") == user_id
-            is_shared_with_user = agent.get(
-                "shared_publicly", False
-            ) or user_id in agent.get("shared_with", [])
+            is_shared_with_user = agent.get("shared_publicly", False) or user_id in agent.get("shared_with", [])
 
             if not (is_owner or is_shared_with_user):
-                raise Exception("Unauthorized access to the agent")
+                raise PermissionError("Unauthorized access to the agent")
             if is_owner:
                 self.agents_collection.update_one(
                     {"_id": ObjectId(agent_id)},
-                    {
-                        "$set": {
-                            "lastUsedAt": datetime.datetime.now(datetime.timezone.utc)
-                        }
-                    },
+                    {"$set": {"lastUsedAt": datetime.datetime.now(datetime.UTC)}},
                 )
             return str(agent["key"]), not is_owner, agent.get("shared_token")
-        except Exception as e:
-            logger.error(f"Error in get_agent_key: {str(e)}", exc_info=True)
+        except (InvalidId, TypeError, PyMongoError, LookupError, PermissionError) as e:
+            logger.exception("Error in get_agent_key: %s", e)
             raise
 
-    def _get_data_from_api_key(self, api_key: str) -> Dict[str, Any]:
+    def _get_data_from_api_key(self, api_key: str) -> dict[str, Any]:
         data = self.agents_collection.find_one({"key": api_key})
         if not data:
-            raise Exception("Invalid API Key, please generate a new key", 401)
+            raise ValueError("Invalid API Key, please generate a new key", 401)
         source = data.get("source")
         if isinstance(source, DBRef):
             source_doc = self.db.dereference(source)
@@ -215,9 +195,7 @@ class StreamProcessor:
             agent_data = self._get_data_from_api_key(api_key)
 
             if agent_data.get("sources") and len(agent_data["sources"]) > 0:
-                source_ids = [
-                    source["id"] for source in agent_data["sources"] if source.get("id")
-                ]
+                source_ids = [source["id"] for source in agent_data["sources"] if source.get("id")]
                 if source_ids:
                     self.source = {"active_docs": source_ids}
                 else:
@@ -244,9 +222,7 @@ class StreamProcessor:
     def _configure_agent(self):
         """Configure the agent based on request data"""
         agent_id = self.data.get("agent_id")
-        self.agent_key, self.is_shared_usage, self.shared_token = self._get_agent_key(
-            agent_id, self.initial_user_id
-        )
+        self.agent_key, self.is_shared_usage, self.shared_token = self._get_agent_key(agent_id, self.initial_user_id)
 
         api_key = self.data.get("api_key")
         if api_key:
@@ -269,9 +245,7 @@ class StreamProcessor:
                 try:
                     self.retriever_config["chunks"] = int(data_key["chunks"])
                 except (ValueError, TypeError):
-                    logger.warning(
-                        f"Invalid chunks value: {data_key['chunks']}, using default value 2"
-                    )
+                    logger.warning(f"Invalid chunks value: {data_key['chunks']}, using default value 2")
                     self.retriever_config["chunks"] = 2
         elif self.agent_key:
             data_key = self._get_data_from_api_key(self.agent_key)
@@ -283,11 +257,7 @@ class StreamProcessor:
                     "json_schema": data_key.get("json_schema"),
                 }
             )
-            self.decoded_token = (
-                self.decoded_token
-                if self.is_shared_usage
-                else {"sub": data_key.get("user")}
-            )
+            self.decoded_token = self.decoded_token if self.is_shared_usage else {"sub": data_key.get("user")}
             if data_key.get("source"):
                 self.source = {"active_docs": data_key["source"]}
             if data_key.get("retriever"):
@@ -296,9 +266,7 @@ class StreamProcessor:
                 try:
                     self.retriever_config["chunks"] = int(data_key["chunks"])
                 except (ValueError, TypeError):
-                    logger.warning(
-                        f"Invalid chunks value: {data_key['chunks']}, using default value 2"
-                    )
+                    logger.warning(f"Invalid chunks value: {data_key['chunks']}, using default value 2")
                     self.retriever_config["chunks"] = 2
         else:
             self.agent_config.update(

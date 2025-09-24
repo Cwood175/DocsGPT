@@ -10,10 +10,7 @@ from application.core.settings import settings
 class EmbeddingsWrapper:
     def __init__(self, model_name, *args, **kwargs):
         self.model = SentenceTransformer(
-            model_name,
-            config_kwargs={"allow_dangerous_deserialization": True},
-            *args,
-            **kwargs
+            model_name, *args, config_kwargs={"allow_dangerous_deserialization": True}, **kwargs
         )
         self.dimension = self.model.get_sentence_embedding_dimension()
 
@@ -29,17 +26,17 @@ class EmbeddingsWrapper:
         elif isinstance(text, list):
             return self.embed_documents(text)
         else:
-            raise ValueError("Input must be a string or a list of strings")
+            raise TypeError("Input must be a string or a list of strings")
 
 
 class EmbeddingsSingleton:
-    _instances = {}
+    _instances: ClassVar[dict] = {}
 
     @staticmethod
     def get_instance(embeddings_name, *args, **kwargs):
         if embeddings_name not in EmbeddingsSingleton._instances:
-            EmbeddingsSingleton._instances[embeddings_name] = (
-                EmbeddingsSingleton._create_instance(embeddings_name, *args, **kwargs)
+            EmbeddingsSingleton._instances[embeddings_name] = EmbeddingsSingleton._create_instance(
+                embeddings_name, *args, **kwargs
             )
         return EmbeddingsSingleton._instances[embeddings_name]
 
@@ -53,9 +50,7 @@ class EmbeddingsSingleton:
             "huggingface_sentence-transformers-all-mpnet-base-v2": lambda: EmbeddingsWrapper(
                 "sentence-transformers/all-mpnet-base-v2"
             ),
-            "huggingface_hkunlp/instructor-large": lambda: EmbeddingsWrapper(
-                "hkunlp/instructor-large"
-            ),
+            "huggingface_hkunlp/instructor-large": lambda: EmbeddingsWrapper("hkunlp/instructor-large"),
         }
 
         if embeddings_name in embeddings_factory:
@@ -71,39 +66,28 @@ class BaseVectorStore(ABC):
     @abstractmethod
     def search(self, *args, **kwargs):
         """Search for similar documents/chunks in the vectorstore"""
-        pass
 
     @abstractmethod
     def add_texts(self, texts, metadatas=None, *args, **kwargs):
         """Add texts with their embeddings to the vectorstore"""
-        pass
 
     def delete_index(self, *args, **kwargs):
         """Delete the entire index/collection"""
-        pass
 
     def save_local(self, *args, **kwargs):
         """Save vectorstore to local storage"""
-        pass
 
     def get_chunks(self, *args, **kwargs):
         """Get all chunks from the vectorstore"""
-        pass
 
     def add_chunk(self, text, metadata=None, *args, **kwargs):
         """Add a single chunk to the vectorstore"""
-        pass
 
     def delete_chunk(self, chunk_id, *args, **kwargs):
         """Delete a specific chunk from the vectorstore"""
-        pass
 
     def is_azure_configured(self):
-        return (
-            settings.OPENAI_API_BASE
-            and settings.OPENAI_API_VERSION
-            and settings.AZURE_DEPLOYMENT_NAME
-        )
+        return settings.OPENAI_API_BASE and settings.OPENAI_API_VERSION and settings.AZURE_DEPLOYMENT_NAME
 
     def _get_embeddings(self, embeddings_name, embeddings_key=None):
         if embeddings_name == "openai_text-embedding-ada-002":
@@ -113,9 +97,7 @@ class BaseVectorStore(ABC):
                     embeddings_name, model=settings.AZURE_EMBEDDINGS_DEPLOYMENT_NAME
                 )
             else:
-                embedding_instance = EmbeddingsSingleton.get_instance(
-                    embeddings_name, openai_api_key=embeddings_key
-                )
+                embedding_instance = EmbeddingsSingleton.get_instance(embeddings_name, openai_api_key=embeddings_key)
         elif embeddings_name == "huggingface_sentence-transformers/all-mpnet-base-v2":
             if os.path.exists("./models/all-mpnet-base-v2"):
                 embedding_instance = EmbeddingsSingleton.get_instance(

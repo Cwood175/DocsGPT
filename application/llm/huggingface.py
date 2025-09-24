@@ -2,7 +2,6 @@ from application.llm.base import BaseLLM
 
 
 class HuggingFaceLLM(BaseLLM):
-
     def __init__(
         self,
         api_key=None,
@@ -21,8 +20,8 @@ class HuggingFaceLLM(BaseLLM):
             from transformers import (
                 AutoModelForCausalLM,
                 AutoTokenizer,
-                pipeline,
                 BitsAndBytesConfig,
+                pipeline,
             )
 
             tokenizer = AutoTokenizer.from_pretrained(llm_name)
@@ -32,9 +31,7 @@ class HuggingFaceLLM(BaseLLM):
                 bnb_4bit_quant_type="nf4",
                 bnb_4bit_compute_dtype=torch.bfloat16,
             )
-            model = AutoModelForCausalLM.from_pretrained(
-                llm_name, quantization_config=bnb_config
-            )
+            model = AutoModelForCausalLM.from_pretrained(llm_name, quantization_config=bnb_config)
         else:
             from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
 

@@ -1,16 +1,18 @@
 import asyncio
-import websockets
-import json
 import base64
+import json
 from io import BytesIO
+
+import websockets
+
 from application.tts.base import BaseTTS
 
 
 class ElevenlabsTTS(BaseTTS):
-    def __init__(self):        
-        self.api_key = 'ELEVENLABS_API_KEY'# here you should put your api key
+    def __init__(self):
+        self.api_key = "ELEVENLABS_API_KEY"  # here you should put your api key
         self.model = "eleven_flash_v2_5"
-        self.voice = "VOICE_ID" # this is the hash code for the voice not the name!
+        self.voice = "VOICE_ID"  # this is the hash code for the voice not the name!
         self.write_audio = 1
 
     def text_to_speech(self, text):
@@ -29,7 +31,7 @@ class ElevenlabsTTS(BaseTTS):
         }
 
         await websocket.send(json.dumps(payload))
-        
+
         async def listen():
             while 1:
                 try:
@@ -44,26 +46,31 @@ class ElevenlabsTTS(BaseTTS):
                 except websockets.exceptions.ConnectionClosed:
                     print("websocket closed")
                     break
-        listen_task =  asyncio.create_task(self.stream(listen()))
-        
+
+        listen_task = asyncio.create_task(self.stream(listen()))
+
         await websocket.send(json.dumps({"text": text}))
         # this is to signal the end of the text, either use this or flush
-        await websocket.send(json.dumps({"text": ""})) 
+        await websocket.send(json.dumps({"text": ""}))
 
         await listen_task
-    
+
     async def stream(self, audio_stream):
         if self.write_audio:
             audio_bytes = BytesIO()
             async for chunk in audio_stream:
                 if chunk:
                     audio_bytes.write(chunk)
-            with open("output_audio.mp3", "wb") as f:
-                f.write(audio_bytes.getvalue())
-        
+
+            def write_audio_file():
+                with open("output_audio.mp3", "wb") as f:
+                    f.write(audio_bytes.getvalue())
+
+            await asyncio.to_thread(write_audio_file)
+
         else:
             async for chunk in audio_stream:
-                pass # depends on the streamer!
+                pass  # depends on the streamer!
 
 
 def test_elevenlabs_websocket():

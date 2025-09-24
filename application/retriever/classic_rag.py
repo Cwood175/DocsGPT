@@ -4,8 +4,9 @@ import os
 from application.core.settings import settings
 from application.llm.llm_creator import LLMCreator
 from application.retriever.base import BaseRetriever
-
 from application.vectorstore.vector_creator import VectorCreator
+
+logger = logging.getLogger(__name__)
 
 
 class ClassicRAG(BaseRetriever):
@@ -30,23 +31,12 @@ class ClassicRAG(BaseRetriever):
             try:
                 self.chunks = int(chunks)
             except ValueError:
-                logging.warning(
-                    f"Invalid chunks value '{chunks}', using default value 2"
-                )
+                logger.warning(f"Invalid chunks value '{chunks}', using default value 2")
                 self.chunks = 2
         else:
             self.chunks = chunks
         self.gpt_model = gpt_model
-        self.token_limit = (
-            token_limit
-            if token_limit
-            < settings.LLM_TOKEN_LIMITS.get(
-                self.gpt_model, settings.DEFAULT_MAX_HISTORY
-            )
-            else settings.LLM_TOKEN_LIMITS.get(
-                self.gpt_model, settings.DEFAULT_MAX_HISTORY
-            )
-        )
+        self.token_limit = min(settings.LLM_TOKEN_LIMITS.get(self.gpt_model, settings.DEFAULT_MAX_HISTORY), token_limit)
         self.user_api_key = user_api_key
         self.llm_name = llm_name
         self.api_key = api_key
@@ -58,10 +48,9 @@ class ClassicRAG(BaseRetriever):
         )
 
         if "active_docs" in source and source["active_docs"] is not None:
-            if isinstance(source["active_docs"], list):
-                self.vectorstores = source["active_docs"]
-            else:
-                self.vectorstores = [source["active_docs"]]
+            self.vectorstores = (
+                source["active_docs"] if isinstance(source["active_docs"], list) else [source["active_docs"]]
+            )
         else:
             self.vectorstores = []
         self.question = self._rephrase_query()
@@ -71,16 +60,12 @@ class ClassicRAG(BaseRetriever):
     def _validate_vectorstore_config(self):
         """Validate vectorstore IDs and remove any empty/invalid entries"""
         if not self.vectorstores:
-            logging.warning("No vectorstores configured for retrieval")
+            logger.warning("No vectorstores configured for retrieval")
             return
-        invalid_ids = [
-            vs_id for vs_id in self.vectorstores if not vs_id or not vs_id.strip()
-        ]
+        invalid_ids = [vs_id for vs_id in self.vectorstores if not vs_id or not vs_id.strip()]
         if invalid_ids:
-            logging.warning(f"Found invalid vectorstore IDs: {invalid_ids}")
-            self.vectorstores = [
-                vs_id for vs_id in self.vectorstores if vs_id and vs_id.strip()
-            ]
+            logger.warning(f"Found invalid vectorstore IDs: {invalid_ids}")
+            self.vectorstores = [vs_id for vs_id in self.vectorstores if vs_id and vs_id.strip()]
 
     def _rephrase_query(self):
         """Rephrase user query with chat history context for better retrieval"""
@@ -113,8 +98,8 @@ class ClassicRAG(BaseRetriever):
             rephrased_query = self.llm.gen(model=self.gpt_model, messages=messages)
             print(f"Rephrased query: {rephrased_query}")
             return rephrased_query if rephrased_query else self.original_question
-        except Exception as e:
-            logging.error(f"Error rephrasing query: {e}", exc_info=True)
+        except Exception:
+            logger.exception("Error rephrasing query")
             return self.original_question
 
     def _get_data(self):
@@ -139,22 +124,13 @@ class ClassicRAG(BaseRetriever):
                         else:
                             page_content = doc.get("text", doc.get("page_content", ""))
                             metadata = doc.get("metadata", {})
-                        title = metadata.get(
-                            "title", metadata.get("post_title", page_content)
-                        )
+                        title = metadata.get("title", metadata.get("post_title", page_content))
                         if not isinstance(title, str):
                             title = str(title)
                         title = title.split("/")[-1]
 
-                        filename = (
-                            metadata.get("filename")
-                            or metadata.get("file_name")
-                            or metadata.get("source")
-                        )
-                        if isinstance(filename, str):
-                            filename = os.path.basename(filename) or filename
-                        else:
-                            filename = title
+                        filename = metadata.get("filename") or metadata.get("file_name") or metadata.get("source")
+                        filename = os.path.basename(filename) or filename if isinstance(filename, str) else title
                         if not filename:
                             filename = title
                         source_path = metadata.get("source") or vectorstore_id
@@ -166,11 +142,8 @@ class ClassicRAG(BaseRetriever):
                                 "filename": filename,
                             }
                         )
-                except Exception as e:
-                    logging.error(
-                        f"Error searching vectorstore {vectorstore_id}: {e}",
-                        exc_info=True,
-                    )
+                except Exception:
+                    logger.exception("Error searching vectorstore %s", vectorstore_id)
                     continue
         return all_docs
 

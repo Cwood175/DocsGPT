@@ -3,8 +3,9 @@
 Contains parsers for tabular data files.
 
 """
+
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any
 
 from application.parser.file.base_parser import BaseParser
 
@@ -24,11 +25,11 @@ class CSVParser(BaseParser):
         super().__init__(*args, **kwargs)
         self._concat_rows = concat_rows
 
-    def _init_parser(self) -> Dict:
+    def _init_parser(self) -> dict:
         """Init parser."""
         return {}
 
-    def parse_file(self, file: Path, errors: str = "ignore") -> Union[str, List[str]]:
+    def parse_file(self, file: Path, errors: str = "ignore") -> str | list[str]:
         """Parse file.
 
         Returns:
@@ -73,40 +74,40 @@ class PandasCSVParser(BaseParser):
             for more information.
             Set to empty dict by default, this means pandas will try to figure
             out the separators, table head, etc. on its own.
-            
+
         header_period (int): Controls how headers are included in output:
             - 0: Headers only at the beginning
             - 1: Headers in every row
             - N > 1: Headers every N rows
-            
+
         header_prefix (str): Prefix for header rows. Default is "HEADERS: ".
     """
 
     def __init__(
-            self,
-            *args: Any,
-            concat_rows: bool = True,
-            col_joiner: str = ", ",
-            row_joiner: str = "\n",
-            pandas_config: dict = {},
-            header_period: int = 20,
-            header_prefix: str = "HEADERS: ",
-            **kwargs: Any
+        self,
+        *args: Any,
+        concat_rows: bool = True,
+        col_joiner: str = ", ",
+        row_joiner: str = "\n",
+        pandas_config: dict | None = None,
+        header_period: int = 20,
+        header_prefix: str = "HEADERS: ",
+        **kwargs: Any,
     ) -> None:
         """Init params."""
         super().__init__(*args, **kwargs)
         self._concat_rows = concat_rows
         self._col_joiner = col_joiner
         self._row_joiner = row_joiner
-        self._pandas_config = pandas_config
+        self._pandas_config = pandas_config if pandas_config is not None else {}
         self._header_period = header_period
         self._header_prefix = header_prefix
 
-    def _init_parser(self) -> Dict:
+    def _init_parser(self) -> dict:
         """Init parser."""
         return {}
 
-    def parse_file(self, file: Path, errors: str = "ignore") -> Union[str, List[str]]:
+    def parse_file(self, file: Path, errors: str = "ignore") -> str | list[str]:
         """Parse file."""
         try:
             import pandas as pd
@@ -118,16 +119,14 @@ class PandasCSVParser(BaseParser):
         header_row = f"{self._header_prefix}{self._col_joiner.join(headers)}"
 
         if not self._concat_rows:
-            return df.apply(
-                lambda row: (self._col_joiner).join(row.astype(str).tolist()), axis=1
-            ).tolist()
-        
+            return df.apply(lambda row: (self._col_joiner).join(row.astype(str).tolist()), axis=1).tolist()
+
         text_list = []
         if self._header_period != 1:
             text_list.append(header_row)
-        
+
         for i, row in df.iterrows():
-            if (self._header_period > 1 and i > 0 and i % self._header_period == 0):
+            if self._header_period > 1 and i > 0 and i % self._header_period == 0:
                 text_list.append(header_row)
             text_list.append(self._col_joiner.join(row.astype(str).tolist()))
             if self._header_period == 1 and i < len(df) - 1:
@@ -159,40 +158,40 @@ class ExcelParser(BaseParser):
             for more information.
             Set to empty dict by default, this means pandas will try to figure
             out the table structure on its own.
-            
+
         header_period (int): Controls how headers are included in output:
             - 0: Headers only at the beginning (default)
             - 1: Headers in every row
             - N > 1: Headers every N rows
-            
+
         header_prefix (str): Prefix for header rows. Default is "HEADERS: ".
     """
 
     def __init__(
-            self,
-            *args: Any,
-            concat_rows: bool = True,
-            col_joiner: str = ", ",
-            row_joiner: str = "\n",
-            pandas_config: dict = {},
-            header_period: int = 20,
-            header_prefix: str = "HEADERS: ",
-            **kwargs: Any
+        self,
+        *args: Any,
+        concat_rows: bool = True,
+        col_joiner: str = ", ",
+        row_joiner: str = "\n",
+        pandas_config: dict | None = None,
+        header_period: int = 20,
+        header_prefix: str = "HEADERS: ",
+        **kwargs: Any,
     ) -> None:
         """Init params."""
         super().__init__(*args, **kwargs)
         self._concat_rows = concat_rows
         self._col_joiner = col_joiner
         self._row_joiner = row_joiner
-        self._pandas_config = pandas_config
+        self._pandas_config = pandas_config if pandas_config is not None else {}
         self._header_period = header_period
         self._header_prefix = header_prefix
 
-    def _init_parser(self) -> Dict:
+    def _init_parser(self) -> dict:
         """Init parser."""
         return {}
 
-    def parse_file(self, file: Path, errors: str = "ignore") -> Union[str, List[str]]:
+    def parse_file(self, file: Path, errors: str = "ignore") -> str | list[str]:
         """Parse file."""
         try:
             import pandas as pd
@@ -202,18 +201,16 @@ class ExcelParser(BaseParser):
         df = pd.read_excel(file, **self._pandas_config)
         headers = df.columns.tolist()
         header_row = f"{self._header_prefix}{self._col_joiner.join(headers)}"
-        
+
         if not self._concat_rows:
-            return df.apply(
-                lambda row: (self._col_joiner).join(row.astype(str).tolist()), axis=1
-            ).tolist()
-        
+            return df.apply(lambda row: (self._col_joiner).join(row.astype(str).tolist()), axis=1).tolist()
+
         text_list = []
         if self._header_period != 1:
             text_list.append(header_row)
 
         for i, row in df.iterrows():
-            if (self._header_period > 1 and i > 0 and i % self._header_period == 0):
+            if self._header_period > 1 and i > 0 and i % self._header_period == 0:
                 text_list.append(header_row)
             text_list.append(self._col_joiner.join(row.astype(str).tolist()))
             if self._header_period == 1 and i < len(df) - 1:

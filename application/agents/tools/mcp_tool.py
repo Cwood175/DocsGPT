@@ -1,14 +1,21 @@
 import json
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import requests
 
 from application.agents.tools.base import Tool
 from application.security.encryption import decrypt_credentials
 
-
 _mcp_session_cache = {}
+
+
+class MCPToolDiscoveryError(RuntimeError):
+    """Raised when tools cannot be discovered from an MCP server."""
+
+
+class MCPActionExecutionError(RuntimeError):
+    """Raised when an MCP action cannot be executed."""
 
 
 class MCPTool(Tool):
@@ -17,7 +24,7 @@ class MCPTool(Tool):
     Connect to remote Model Context Protocol (MCP) servers to access dynamic tools and resources. Supports various authentication methods and provides secure access to external services through the MCP protocol.
     """
 
-    def __init__(self, config: Dict[str, Any], user_id: Optional[str] = None):
+    def __init__(self, config: dict[str, Any], user_id: str | None = None):
         """
         Initialize the MCP Tool with configuration.
 
@@ -36,9 +43,7 @@ class MCPTool(Tool):
 
         self.auth_credentials = {}
         if config.get("encrypted_credentials") and user_id:
-            self.auth_credentials = decrypt_credentials(
-                config["encrypted_credentials"], user_id
-            )
+            self.auth_credentials = decrypt_credentials(config["encrypted_credentials"], user_id)
         else:
             self.auth_credentials = config.get("auth_credentials", {})
         self.available_tools = []
@@ -80,7 +85,7 @@ class MCPTool(Tool):
             auth_key = "none"
         return f"{self.server_url}#{auth_key}"
 
-    def _get_cached_session(self) -> Optional[str]:
+    def _get_cached_session(self) -> str | None:
         """Get cached session ID if available and not expired."""
         global _mcp_session_cache
 
@@ -100,7 +105,7 @@ class MCPTool(Tool):
             "created_at": time.time(),
         }
 
-    def _initialize_mcp_connection(self) -> Dict:
+    def _initialize_mcp_connection(self) -> dict:
         """
         Initialize MCP connection with the server, using cached session if available.
 
@@ -129,7 +134,7 @@ class MCPTool(Tool):
         if not self._mcp_session_id:
             self._initialize_mcp_connection()
 
-    def _make_mcp_request(self, method: str, params: Optional[Dict] = None) -> Dict:
+    def _make_mcp_request(self, method: str, params: dict | None = None) -> dict:
         """
         Make an MCP protocol request to the server with automatic session recovery.
 
@@ -151,9 +156,7 @@ class MCPTool(Tool):
             mcp_message["params"] = params
         return self._execute_mcp_request(mcp_message, method)
 
-    def _execute_mcp_request(
-        self, mcp_message: Dict, method: str, is_retry: bool = False
-    ) -> Dict:
+    def _execute_mcp_request(self, mcp_message: dict, method: str, is_retry: bool = False) -> dict:
         """Execute MCP request with optional retry on session failure."""
         try:
             final_headers = self._session.headers.copy()
@@ -210,7 +213,7 @@ class MCPTool(Tool):
             if not is_retry and self._should_retry_with_new_session(e):
                 self._invalidate_and_refresh_session()
                 return self._execute_mcp_request(mcp_message, method, is_retry=True)
-            raise Exception(f"MCP server request failed: {str(e)}")
+            raise Exception(f"MCP server request failed: {e!s}")
 
     def _should_retry_with_new_session(self, error: Exception) -> bool:
         """Check if error indicates session invalidation and retry is warranted."""
@@ -237,7 +240,7 @@ class MCPTool(Tool):
         self._mcp_session_id = None
         self._initialize_mcp_connection()
 
-    def discover_tools(self) -> List[Dict]:
+    def discover_tools(self) -> list[dict]:
         """
         Discover available tools from the MCP server using MCP protocol.
 
@@ -254,11 +257,7 @@ class MCPTool(Tool):
             if isinstance(response, dict):
                 if "tools" in response:
                     self.available_tools = response["tools"]
-                elif (
-                    "result" in response
-                    and isinstance(response["result"], dict)
-                    and "tools" in response["result"]
-                ):
+                elif "result" in response and isinstance(response["result"], dict) and "tools" in response["result"]:
                     self.available_tools = response["result"]["tools"]
                 else:
                     self.available_tools = [response] if response else []
@@ -267,8 +266,8 @@ class MCPTool(Tool):
             else:
                 self.available_tools = []
             return self.available_tools
-        except Exception as e:
-            raise Exception(f"Failed to discover tools from MCP server: {str(e)}")
+        except requests.exceptions.RequestException as e:
+            raise MCPToolDiscoveryError(f"Failed to discover tools from MCP server: {e}") from e
 
     def execute_action(self, action_name: str, **kwargs) -> Any:
         """
@@ -292,12 +291,11 @@ class MCPTool(Tool):
             cleaned_kwargs[key] = value
         call_params = {"name": action_name, "arguments": cleaned_kwargs}
         try:
-            result = self._make_mcp_request("tools/call", call_params)
-            return result
-        except Exception as e:
-            raise Exception(f"Failed to execute action '{action_name}': {str(e)}")
+            return self._make_mcp_request("tools/call", call_params)
+        except requests.exceptions.RequestException as e:
+            raise MCPActionExecutionError(f"Failed to execute action '{action_name}': {e}") from e
 
-    def get_actions_metadata(self) -> List[Dict]:
+    def get_actions_metadata(self) -> list[dict]:
         """
         Get metadata for all available actions.
 
@@ -307,10 +305,7 @@ class MCPTool(Tool):
         actions = []
         for tool in self.available_tools:
             input_schema = (
-                tool.get("inputSchema")
-                or tool.get("input_schema")
-                or tool.get("schema")
-                or tool.get("parameters")
+                tool.get("inputSchema") or tool.get("input_schema") or tool.get("schema") or tool.get("parameters")
             )
 
             parameters_schema = {
@@ -319,20 +314,19 @@ class MCPTool(Tool):
                 "required": [],
             }
 
-            if input_schema:
-                if isinstance(input_schema, dict):
-                    if "properties" in input_schema:
-                        parameters_schema = {
-                            "type": input_schema.get("type", "object"),
-                            "properties": input_schema.get("properties", {}),
-                            "required": input_schema.get("required", []),
-                        }
+            if input_schema and isinstance(input_schema, dict):
+                if "properties" in input_schema:
+                    parameters_schema = {
+                        "type": input_schema.get("type", "object"),
+                        "properties": input_schema.get("properties", {}),
+                        "required": input_schema.get("required", []),
+                    }
 
-                        for key in ["additionalProperties", "description"]:
-                            if key in input_schema:
-                                parameters_schema[key] = input_schema[key]
-                    else:
-                        parameters_schema["properties"] = input_schema
+                    for key in ["additionalProperties", "description"]:
+                        if key in input_schema:
+                            parameters_schema[key] = input_schema[key]
+                else:
+                    parameters_schema["properties"] = input_schema
             action = {
                 "name": tool.get("name", ""),
                 "description": tool.get("description", ""),
@@ -341,7 +335,7 @@ class MCPTool(Tool):
             actions.append(action)
         return actions
 
-    def test_connection(self) -> Dict:
+    def test_connection(self) -> dict:
         """
         Test the connection to the MCP server and validate functionality.
 
@@ -367,15 +361,15 @@ class MCPTool(Tool):
                 "session_id": self._mcp_session_id,
                 "tools": [tool.get("name", "unknown") for tool in tools[:5]],
             }
-        except Exception as e:
+        except (requests.exceptions.RequestException, MCPToolDiscoveryError) as e:
             return {
                 "success": False,
-                "message": f"Connection failed: {str(e)}",
+                "message": f"Connection failed: {e}",
                 "tools_count": 0,
                 "error_type": type(e).__name__,
             }
 
-    def get_config_requirements(self) -> Dict:
+    def get_config_requirements(self) -> dict:
         return {
             "server_url": {
                 "type": "string",
