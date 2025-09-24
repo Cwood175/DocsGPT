@@ -22,7 +22,7 @@ def get_encoding():
 
 def get_gpt_model() -> str:
     """Get the appropriate GPT model based on provider"""
-    model_map = {
+    model_map: dict[str, str] = {
         "openai": "gpt-4o-mini",
         "anthropic": "claude-2",
         "groq": "llama3-8b-8192",
@@ -64,11 +64,11 @@ def num_tokens_from_string(string: str) -> int:
         return 0
 
 
-def num_tokens_from_object_or_list(thing):
+def num_tokens_from_object_or_list(thing) -> int:
     if isinstance(thing, list):
-        return sum([num_tokens_from_object_or_list(x) for x in thing])
+        return sum(num_tokens_from_object_or_list(x) for x in thing)
     elif isinstance(thing, dict):
-        return sum([num_tokens_from_object_or_list(x) for x in thing.values()])
+        return sum(num_tokens_from_object_or_list(x) for x in thing.values())
     elif isinstance(thing, str):
         return num_tokens_from_string(thing)
     else:
@@ -83,7 +83,7 @@ def count_tokens_docs(docs):
     return tokens
 
 
-def check_required_fields(data, required_fields):
+def check_required_fields(data, required_fields) -> None:
     missing_fields = [field for field in required_fields if field not in data]
     if missing_fields:
         return make_response(
@@ -98,16 +98,16 @@ def check_required_fields(data, required_fields):
     return None
 
 
-def validate_required_fields(data, required_fields):
-    missing_fields = []
-    empty_fields = []
+def validate_required_fields(data, required_fields) -> None:
+    missing_fields: list[str] = []
+    empty_fields: list[str] = []
 
     for field in required_fields:
         if field not in data:
             missing_fields.append(field)
         elif not data[field]:
             empty_fields.append(field)
-    errors = []
+    errors: list[str] = []
     if missing_fields:
         errors.append(f"Missing required fields: {', '.join(missing_fields)}")
     if empty_fields:
@@ -119,11 +119,11 @@ def validate_required_fields(data, required_fields):
     return None
 
 
-def get_hash(data):
+def get_hash(data: str) -> str:
     return hashlib.md5(data.encode(), usedforsecurity=False).hexdigest()
 
 
-def limit_chat_history(history, max_token_limit=None, gpt_model="docsgpt"):
+def limit_chat_history(history, max_token_limit=None, gpt_model="docsgpt") -> list:
     """
     Limits chat history based on token count.
     Returns a list of messages that fit within the token limit.
@@ -160,14 +160,14 @@ def limit_chat_history(history, max_token_limit=None, gpt_model="docsgpt"):
     return trimmed_history
 
 
-def validate_function_name(function_name):
+def validate_function_name(function_name: str) -> bool:
     """Validates if a function name matches the allowed pattern."""
     if not re.match(r"^[a-zA-Z0-9_-]+$", function_name):
         return False
     return True
 
 
-def generate_image_url(image_path):
+def generate_image_url(image_path: str) -> str:
     strategy = getattr(settings, "URL_STRATEGY", "backend")
     if strategy == "s3":
         bucket_name = getattr(settings, "S3_BUCKET_NAME", "docsgpt-test-bucket")
