@@ -1,7 +1,8 @@
 import logging
+import sys
 import traceback
 
-from flask import make_response, request
+from flask import Blueprint, make_response, request
 from flask_restx import fields, Resource
 
 from application.api import api
@@ -13,7 +14,10 @@ from application.api.answer.services.stream_processor import StreamProcessor
 logger = logging.getLogger(__name__)
 
 
-@answer_ns.route("/api/answer")
+answer = Blueprint("answer", __name__)
+
+
+@answer.route("/api/answer")
 class AnswerResource(Resource, BaseAnswerResource):
     def __init__(self, *args, **kwargs):
         Resource.__init__(self, *args, **kwargs)
@@ -120,3 +124,7 @@ class AnswerResource(Resource, BaseAnswerResource):
             )
             return make_response({"error": str(e)}, 500)
         return make_response(result, 200)
+
+
+api.register_blueprint(answer)
+setattr(sys.modules[__name__], "register", answer)
