@@ -1,6 +1,6 @@
 import json
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 import requests
 
@@ -17,7 +17,7 @@ class MCPTool(Tool):
     Connect to remote Model Context Protocol (MCP) servers to access dynamic tools and resources. Supports various authentication methods and provides secure access to external services through the MCP protocol.
     """
 
-    def __init__(self, config: Dict[str, Any], user_id: Optional[str] = None):
+    def __init__(self, config: dict[str, Any], user_id: Optional[str] = None):
         """
         Initialize the MCP Tool with configuration.
 
@@ -121,7 +121,7 @@ class MCPTool(Tool):
             self._make_mcp_request("notifications/initialized")
 
             return response
-        except Exception as e:
+        except (requests.exceptions.RequestException, json.JSONDecodeError) as e:
             return {"error": str(e), "fallback": True}
 
     def _ensure_valid_session(self):
@@ -129,7 +129,7 @@ class MCPTool(Tool):
         if not self._mcp_session_id:
             self._initialize_mcp_connection()
 
-    def _make_mcp_request(self, method: str, params: Optional[Dict] = None) -> Dict:
+    def _make_mcp_request(self, method: str, params: Optional[dict] = None) -> dict:
         """
         Make an MCP protocol request to the server with automatic session recovery.
 
@@ -152,8 +152,8 @@ class MCPTool(Tool):
         return self._execute_mcp_request(mcp_message, method)
 
     def _execute_mcp_request(
-        self, mcp_message: Dict, method: str, is_retry: bool = False
-    ) -> Dict:
+        self, mcp_message: dict, method: str, is_retry: bool = False
+    ) -> dict:
         """Execute MCP request with optional retry on session failure."""
         try:
             final_headers = self._session.headers.copy()
@@ -237,7 +237,7 @@ class MCPTool(Tool):
         self._mcp_session_id = None
         self._initialize_mcp_connection()
 
-    def discover_tools(self) -> List[Dict]:
+    def discover_tools(self) -> list[dict]:
         """
         Discover available tools from the MCP server using MCP protocol.
 
@@ -295,7 +295,7 @@ class MCPTool(Tool):
             result = self._make_mcp_request("tools/call", call_params)
             return result
         except Exception as e:
-            raise Exception(f"Failed to execute action '{action_name}': {str(e)}")
+            raise RuntimeError(f"Failed to execute action '{action_name}': {str(e)}")
 
     def get_actions_metadata(self) -> List[Dict]:
         """
@@ -341,7 +341,7 @@ class MCPTool(Tool):
             actions.append(action)
         return actions
 
-    def test_connection(self) -> Dict:
+    def test_connection(self) -> dict:
         """
         Test the connection to the MCP server and validate functionality.
 

@@ -1,7 +1,8 @@
 """Local file system implementation."""
 import os
 import shutil
-from typing import BinaryIO, List, Callable
+from io import BinaryIO
+from typing import Callable, Optional
 
 from application.storage.base import BaseStorage
 
@@ -9,7 +10,7 @@ from application.storage.base import BaseStorage
 class LocalStorage(BaseStorage):
     """Local file system storage implementation."""
 
-    def __init__(self, base_dir: str = None):
+    def __init__(self, base_dir: Optional[str] = None):
         """
         Initialize local storage.
 

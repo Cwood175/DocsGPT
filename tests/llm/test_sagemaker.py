@@ -3,6 +3,7 @@
 import json
 import unittest
 from unittest.mock import MagicMock, patch
+
 from application.llm.sagemaker import SagemakerAPILLM, LineIterator
 
 class TestSagemakerAPILLM(unittest.TestCase):

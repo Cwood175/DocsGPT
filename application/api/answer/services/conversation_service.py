@@ -1,11 +1,11 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
+
+from bson import ObjectId
 
 from application.core.mongo_db import MongoDB
-
 from application.core.settings import settings
-from bson import ObjectId
 
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class ConversationService:
 
     def get_conversation(
         self, conversation_id: str, user_id: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """Retrieve a conversation with proper access control"""
         if not conversation_id or not user_id:
             return None
@@ -40,7 +40,7 @@ class ConversationService:
             conversation["_id"] = str(conversation["_id"])
             return conversation
         except Exception as e:
-            logger.error(f"Error fetching conversation: {str(e)}", exc_info=True)
+            logger.exception(f"Error fetching conversation: {str(e)}")
             return None
 
     def save_conversation(

@@ -4,8 +4,9 @@ Contains parser for .png, .jpg, .jpeg files.
 
 """
 from pathlib import Path
+from typing import Union
+
 import requests
-from typing import Dict, Union
 
 from application.parser.file.base_parser import BaseParser
 from application.core.settings import settings
@@ -24,8 +25,8 @@ class ImageParser(BaseParser):
             # alternatively you can use local vision capable LLM
             with open(file, "rb") as file_loaded:
                 files = {'file': file_loaded}
-                response = requests.post(doc2md_service, files=files)   
-                data = response.json()["markdown"] 
+                response = requests.post(doc2md_service, files=files)
+                data = response.json()["markdown"]
         else:
             data = ""
         return data

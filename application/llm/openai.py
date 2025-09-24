@@ -239,8 +239,8 @@ class OpenAILLM(BaseLLM):
 
             return result
 
-        except Exception as e:
-            logging.error(f"Error preparing structured output format: {e}")
+        except Exception:
+            logging.exception("Error preparing structured output format")
             return None
 
     def get_supported_attachment_types(self):
@@ -309,10 +309,8 @@ class OpenAILLM(BaseLLM):
                             },
                         }
                     )
-                except Exception as e:
-                    logging.error(
-                        f"Error processing image attachment: {e}", exc_info=True
-                    )
+                except Exception:
+                    logging.exception("Error processing image attachment")
                     if "content" in attachment:
                         prepared_messages[user_message_index]["content"].append(
                             {
@@ -327,8 +325,8 @@ class OpenAILLM(BaseLLM):
                     prepared_messages[user_message_index]["content"].append(
                         {"type": "file", "file": {"file_id": file_id}}
                     )
-                except Exception as e:
-                    logging.error(f"Error uploading PDF to OpenAI: {e}", exc_info=True)
+                except Exception:
+                    logging.exception("Error uploading PDF to OpenAI")
                     if "content" in attachment:
                         prepared_messages[user_message_index]["content"].append(
                             {
@@ -401,8 +399,8 @@ class OpenAILLM(BaseLLM):
                 )
 
             return file_id
-        except Exception as e:
-            logging.error(f"Error uploading file to OpenAI: {e}", exc_info=True)
+        except Exception:
+            logging.exception("Error uploading file to OpenAI")
             raise
 
 

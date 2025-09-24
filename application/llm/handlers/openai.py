@@ -1,4 +1,4 @@
-from typing import Any, Dict, Generator
+from typing import Any, Generator
 
 from application.llm.handlers.base import LLMHandler, LLMResponse, ToolCall
 
@@ -36,7 +36,7 @@ class OpenAILLMHandler(LLMHandler):
             raw_response=response,
         )
 
-    def create_tool_message(self, tool_call: ToolCall, result: Any) -> Dict:
+    def create_tool_message(self, tool_call: ToolCall, result: Any) -> dict:
         """Create OpenAI-style tool message."""
         return {
             "role": "tool",

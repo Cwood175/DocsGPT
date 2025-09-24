@@ -5,7 +5,7 @@ Contains parser for md files.
 """
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any, Union
 
 from application.parser.file.base_parser import BaseParser
 

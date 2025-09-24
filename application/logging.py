@@ -1,17 +1,19 @@
 import datetime
 import functools
 import inspect
-
 import logging
 import uuid
-from typing import Any, Callable, Dict, Generator, List
+from typing import Any, Callable, Generator
 
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
 
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
-)
+logger = logging.getLogger(__name__)
+logger.setLevel(logging.INFO)
+formatter = logging.Formatter("%(asctime)s - %(levelname)s - %(message)s")
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+logger.addHandler(handler)
 
 
 class LogContext:
@@ -26,10 +28,10 @@ class LogContext:
 
 def build_stack_data(
     obj: Any,
-    include_attributes: List[str] = None,
-    exclude_attributes: List[str] = None,
-    custom_data: Dict = None,
-) -> Dict:
+    include_attributes: list[str] | None = None,
+    exclude_attributes: list[str] | None = None,
+    custom_data: dict | None = None,
+) -> dict:
     if obj is None:
         raise ValueError("The 'obj' parameter cannot be None")
     data = {}
@@ -99,7 +101,7 @@ def _consume_and_log(generator: Generator, context: "LogContext"):
         for item in generator:
             yield item
     except Exception as e:
-        logging.exception(f"Error in {context.endpoint} - {context.activity_id}: {e}")
+        logger.exception(f"Error in {context.endpoint} - {context.activity_id}: {e}")
         context.stacks.append({"component": "error", "data": {"message": str(e)}})
         _log_to_mongodb(
             endpoint=context.endpoint,

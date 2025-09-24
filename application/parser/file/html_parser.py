@@ -4,7 +4,7 @@ Contains parser for html files.
 
 """
 from pathlib import Path
-from typing import Dict, Union
+from typing import Union
 
 from application.parser.file.base_parser import BaseParser
 

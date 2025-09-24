@@ -32,8 +32,10 @@ class EmbeddingsWrapper:
             raise ValueError("Input must be a string or a list of strings")
 
 
+from typing import ClassVar, Dict, Any
+
 class EmbeddingsSingleton:
-    _instances = {}
+    _instances: ClassVar[Dict[str, Any]] = {}
 
     @staticmethod
     def get_instance(embeddings_name, *args, **kwargs):
@@ -74,7 +76,7 @@ class BaseVectorStore(ABC):
         pass
 
     @abstractmethod
-    def add_texts(self, texts, metadatas=None, *args, **kwargs):
+    def add_texts(self, texts, *args, metadatas=None, **kwargs):
         """Add texts with their embeddings to the vectorstore"""
         pass
 
@@ -90,7 +92,7 @@ class BaseVectorStore(ABC):
         """Get all chunks from the vectorstore"""
         pass
 
-    def add_chunk(self, text, metadata=None, *args, **kwargs):
+    def add_chunk(self, text, *args, metadata=None, **kwargs):
         """Add a single chunk to the vectorstore"""
         pass
 

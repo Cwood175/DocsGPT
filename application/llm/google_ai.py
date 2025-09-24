@@ -5,7 +5,6 @@ from google import genai
 from google.genai import types
 
 from application.core.settings import settings
-
 from application.llm.base import BaseLLM
 from application.storage.storage_creator import StorageCreator
 
@@ -82,8 +81,8 @@ class GoogleLLM(BaseLLM):
                     )
                     files.append({"file_uri": file_uri, "mime_type": mime_type})
                 except Exception as e:
-                    logging.error(
-                        f"GoogleLLM: Error uploading file: {e}", exc_info=True
+                    logging.exception(
+                        f"GoogleLLM: Error uploading file: {e}"
                     )
                     if "content" in attachment:
                         prepared_messages[user_message_index]["content"].append(
@@ -139,7 +138,7 @@ class GoogleLLM(BaseLLM):
 
             return file_uri
         except Exception as e:
-            logging.error(f"Error uploading file to Google AI: {e}", exc_info=True)
+            logging.exception(f"Error uploading file to Google AI: {e}")
             raise
 
     def _clean_messages_google(self, messages):
@@ -457,8 +456,7 @@ class GoogleLLM(BaseLLM):
         try:
             return convert(json_schema)
         except Exception as e:
-            logging.error(
-                f"Error preparing structured output format for Google: {e}",
-                exc_info=True,
+            logging.exception(
+                f"Error preparing structured output format for Google: {e}"
             )
             return None

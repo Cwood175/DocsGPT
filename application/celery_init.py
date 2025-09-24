@@ -1,5 +1,5 @@
-from celery import Celery
 from application.core.settings import settings
+from celery import Celery
 from celery.signals import setup_logging
 
 

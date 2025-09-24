@@ -1,6 +1,7 @@
+import json
+
 from application.parser.remote.base import BaseRemote
 from langchain_community.document_loaders import RedditPostsLoader
-import json
 
 
 class RedditPostsLoaderRemote(BaseRemote):

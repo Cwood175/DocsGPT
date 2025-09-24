@@ -120,7 +120,7 @@ def validate_required_fields(data, required_fields):
 
 
 def get_hash(data):
-    return hashlib.md5(data.encode(), usedforsecurity=False).hexdigest()
+    return hashlib.md5(data.encode()).hexdigest()
 
 
 def limit_chat_history(history, max_token_limit=None, gpt_model="docsgpt"):
@@ -162,9 +162,7 @@ def limit_chat_history(history, max_token_limit=None, gpt_model="docsgpt"):
 
 def validate_function_name(function_name):
     """Validates if a function name matches the allowed pattern."""
-    if not re.match(r"^[a-zA-Z0-9_-]+$", function_name):
-        return False
-    return True
+    return re.match(r"^[a-zA-Z0-9_-]+$", function_name) is not None
 
 
 def generate_image_url(image_path):

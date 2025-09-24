@@ -1,7 +1,7 @@
 """Base schema for data structures."""
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any, Optional
 
 from dataclasses_json import DataClassJsonMixin
 

@@ -6,14 +6,13 @@ Loads documents from Google Drive using Google Drive API.
 import io
 import logging
 import os
-from typing import List, Dict, Any, Optional
-
-from googleapiclient.http import MediaIoBaseDownload
-from googleapiclient.errors import HttpError
+from typing import Any, Optional
 
 from application.parser.connectors.base import BaseConnectorLoader
 from application.parser.connectors.google_drive.auth import GoogleDriveAuth
 from application.parser.schema.base import Document
+from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaIoBaseDownload
 
 
 class GoogleDriveLoader(BaseConnectorLoader):
@@ -65,7 +64,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
 
 
 
-    def _process_file(self, file_metadata: Dict[str, Any], load_content: bool = True) -> Optional[Document]:
+    def _process_file(self, file_metadata: dict[str, Any], load_content: bool = True) -> Optional[Document]:
         try:
             file_id = file_metadata.get('id')
             file_name = file_metadata.get('name', 'Unknown')
@@ -109,14 +108,14 @@ class GoogleDriveLoader(BaseConnectorLoader):
             logging.error(f"Error processing file: {e}")
             return None
 
-    def load_data(self, inputs: Dict[str, Any]) -> List[Document]:
+    def load_data(self, inputs: dict[str, Any]) -> list[Document]:
         session_token = inputs.get('session_token')
         if session_token and session_token != self.session_token:
             logging.warning("Session token in inputs differs from loader's session token. Using loader's session token.")
         self.config = inputs
 
         try:
-            documents: List[Document] = []
+            documents: list[Document] = []
 
             folder_id = inputs.get('folder_id')
             file_ids = inputs.get('file_ids', [])
@@ -164,7 +163,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
             return documents
 
         except Exception as e:
-            logging.error(f"Error loading data from Google Drive: {e}", exc_info=True)
+            logging.exception(f"Error loading data from Google Drive: {e}")
             raise
 
 
@@ -196,15 +195,15 @@ class GoogleDriveLoader(BaseConnectorLoader):
                     raise ValueError("Authentication failed and cannot be refreshed: missing refresh_token")
 
             return None
-        except Exception as e:
+        except HttpError as e:
             logging.error(f"Error loading file {file_id}: {e}")
             return None
 
 
-    def _list_items_in_parent(self, parent_id: str, limit: int = 100, load_content: bool = False, page_token: Optional[str] = None, search_query: Optional[str] = None) -> List[Document]:
+    def _list_items_in_parent(self, parent_id: str, limit: int = 100, load_content: bool = False, page_token: Optional[str] = None, search_query: Optional[str] = None) -> list[Document]:
         self._ensure_service()
 
-        documents: List[Document] = []
+        documents: list[Document] = []
 
         try:
             query = f"'{parent_id}' in parents and trashed=false"
@@ -370,7 +369,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
             self._ensure_service()
             return self._download_single_file(file_id, local_dir)
         except Exception as e:
-            logging.error(f"Error downloading file {file_id}: {e}", exc_info=True)
+            logging.exception(f"Error downloading file {file_id}: {e}")
             return False
 
     def _ensure_service(self):
@@ -467,7 +466,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
             return files_downloaded
 
         except Exception as e:
-            logging.error(f"Error in _download_folder_recursive for folder {folder_id}: {e}", exc_info=True)
+            logging.exception(f"Error in _download_folder_recursive for folder {folder_id}: {e}")
             return files_downloaded
 
     def _get_extension_for_mime_type(self, mime_type: str) -> str:
@@ -487,7 +486,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
             self._ensure_service()
             return self._download_folder_recursive(folder_id, local_dir, recursive)
         except Exception as e:
-            logging.error(f"Error downloading folder {folder_id}: {e}", exc_info=True)
+            logging.exception(f"Error downloading folder {folder_id}: {e}")
             return 0
 
     def download_to_directory(self, local_dir: str, source_config: dict = None) -> dict:
@@ -535,7 +534,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
                         files_downloaded += folder_files
                         logging.info(f"Downloaded {folder_files} files from folder {folder_name}")
                     except Exception as e:
-                        logging.error(f"Error downloading folder {folder_id}: {e}", exc_info=True)
+                        logging.exception(f"Error downloading folder {folder_id}: {e}")
 
             if not file_ids and not folder_ids:
                 raise ValueError("No folder_ids or file_ids provided for download")

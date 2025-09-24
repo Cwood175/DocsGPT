@@ -1,10 +1,11 @@
-from application.llm.base import BaseLLM
-from application.core.settings import settings
 import threading
+
+from application.core.settings import settings
+from application.llm.base import BaseLLM
 
 
 class LlamaSingleton:
-    _instances = {}
+    _instances: dict = {}
     _lock = threading.Lock()  # Add a lock for thread synchronization
 
     @classmethod

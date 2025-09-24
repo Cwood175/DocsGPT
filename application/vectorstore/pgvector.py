@@ -1,5 +1,6 @@
 import logging
-from typing import List, Optional, Any, Dict
+from typing import Any, Optional
+
 from application.core.settings import settings
 from application.vectorstore.base import BaseVectorStore
 from application.vectorstore.document_class import Document
@@ -14,7 +15,7 @@ class PGVectorStore(BaseVectorStore):
         vector_column: str = "embedding",
         text_column: str = "text",
         metadata_column: str = "metadata",
-        connection_string: str = None,
+        connection_string: Optional[str] = None,
     ):
         super().__init__()
         # Store the source_id for use in add_chunk
@@ -102,7 +103,7 @@ class PGVectorStore(BaseVectorStore):
             conn.commit()
         except Exception as e:
             conn.rollback()
-            logging.error(f"Error creating table: {e}")
+            logging.exception(f"Error creating table")
             raise
         finally:
             cursor.close()
@@ -137,7 +138,7 @@ class PGVectorStore(BaseVectorStore):
             return documents
             
         except Exception as e:
-            logging.error(f"Error searching documents: {e}", exc_info=True)
+            logging.exception(f"Error searching documents")
             return []
         finally:
             cursor.close()
@@ -180,7 +181,7 @@ class PGVectorStore(BaseVectorStore):
             
         except Exception as e:
             conn.rollback()
-            logging.error(f"Error adding texts: {e}")
+            logging.exception(f"Error adding texts")
             raise
         finally:
             cursor.close()
@@ -197,7 +198,7 @@ class PGVectorStore(BaseVectorStore):
             
         except Exception as e:
             conn.rollback()
-            logging.error(f"Error deleting index: {e}")
+            logging.exception(f"Error deleting index")
             raise
         finally:
             cursor.close()
@@ -231,7 +232,7 @@ class PGVectorStore(BaseVectorStore):
             return chunks
             
         except Exception as e:
-            logging.error(f"Error getting chunks: {e}")
+            logging.exception(f"Error getting chunks")
             return []
         finally:
             cursor.close()
