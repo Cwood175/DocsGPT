@@ -1,7 +1,7 @@
 import logging
 import traceback
 
-from flask import make_response, request
+from flask import Blueprint, make_response, request
 from flask_restx import fields, Resource
 
 from application.api import api
@@ -11,6 +11,8 @@ from application.api.answer.routes.base import answer_ns, BaseAnswerResource
 from application.api.answer.services.stream_processor import StreamProcessor
 
 logger = logging.getLogger(__name__)
+
+answer = Blueprint("answer", __name__)
 
 
 @answer_ns.route("/api/answer")
