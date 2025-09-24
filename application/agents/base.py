@@ -1,7 +1,7 @@
 import logging
 import uuid
 from abc import ABC, abstractmethod
-from typing import Dict, Generator, List, Optional
+from typing import Generator, list, dict
 
 from bson.objectid import ObjectId
 
@@ -99,7 +99,7 @@ class BaseAgent(ABC):
 
     def _build_tool_parameters(self, action):
         params = {"type": "object", "properties": {}, "required": []}
-        for param_type in ["query_params", "headers", "body", "parameters"]:
+        for param_type in ["query_by_llm", "headers", "body", "parameters"]:
             if param_type in action and action[param_type].get("properties"):
                 for k, v in action[param_type]["properties"].items():
                     if v.get("filled_by_llm", True):
@@ -354,10 +354,10 @@ class BaseAgent(ABC):
     def _llm_handler(
         self,
         resp,
-        tools_dict: Dict,
-        messages: List[Dict],
-        log_context: Optional[LogContext] = None,
-        attachments: Optional[List[Dict]] = None,
+        tools_dict: dict,
+        messages: list[dict],
+        log_context: LogContext | None = None,
+        attachments: list[dict] | None = None,
     ):
         resp = self.llm_handler.process_message_flow(
             self, resp, tools_dict, messages, attachments, True

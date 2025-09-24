@@ -6,11 +6,11 @@ import os
 import shutil
 import string
 import tempfile
-from typing import Any, Dict
 import zipfile
 
 from collections import Counter
 from urllib.parse import urljoin
+from typing import Any, Dict
 
 import requests
 from bson.dbref import DBRef
@@ -794,10 +794,9 @@ def attachment_worker(self, file_info, user):
             "metadata": metadata,
         }
     except Exception as e:
-        logging.error(
+        logging.exception(
             f"Error processing file {filename}: {e}",
             extra={"user": user},
-            exc_info=True,
         )
         raise
 

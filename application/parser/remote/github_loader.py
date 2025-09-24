@@ -1,9 +1,9 @@
 import base64
+import mimetypes
 import requests
-from typing import List
 from application.parser.remote.base import BaseRemote
 from langchain_core.documents import Document
-import mimetypes
+from typing import List
 
 class GitHubLoader(BaseRemote):
     def __init__(self):
@@ -35,19 +35,19 @@ class GitHubLoader(BaseRemote):
         else:
             response.raise_for_status()
 
-    def fetch_repo_files(self, repo_url: str, path: str = "") -> List[str]:
+    def fetch_repo_files(self, repo_url: str, path: str = "") -> list[str]:
         url = f"https://api.github.com/repos/{repo_url}/contents/{path}"
         response = requests.get(url, headers={**self.headers, "Accept": "application/vnd.github.v3.raw"})
         contents = response.json()
         files = []
         for item in contents:
-            if item["type"] == "file":
+            if item.get("type") == "file":
                 files.append(item["path"])
-            elif item["type"] == "dir":
+            elif item.get("type") == "dir":
                 files.extend(self.fetch_repo_files(repo_url, item["path"]))
         return files
 
-    def load_data(self, repo_url: str) -> List[Document]:
+    def load_data(self, repo_url: str) -> list[Document]:
         repo_name = repo_url.split("github.com/")[-1]
         files = self.fetch_repo_files(repo_name)
         documents = []

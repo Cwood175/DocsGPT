@@ -1,6 +1,6 @@
 import json
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any, dict, list, None | str
 
 import requests
 
@@ -267,7 +267,7 @@ class MCPTool(Tool):
             else:
                 self.available_tools = []
             return self.available_tools
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to discover tools from MCP server: {str(e)}")
 
     def execute_action(self, action_name: str, **kwargs) -> Any:
@@ -294,7 +294,7 @@ class MCPTool(Tool):
         try:
             result = self._make_mcp_request("tools/call", call_params)
             return result
-        except Exception as e:
+        except requests.exceptions.RequestException as e:
             raise Exception(f"Failed to execute action '{action_name}': {str(e)}")
 
     def get_actions_metadata(self) -> List[Dict]:

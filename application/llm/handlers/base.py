@@ -1,7 +1,7 @@
-import logging
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import Any, Dict, Generator, List, Optional, Union
+import logging
 
 from application.logging import build_stack_data
 
@@ -18,7 +18,7 @@ class ToolCall:
     index: Optional[int] = None
 
     @classmethod
-    def from_dict(cls, data: Dict) -> "ToolCall":
+    def from_dict(cls, data: dict) -> "ToolCall":
         """Create ToolCall from dictionary."""
         return cls(
             id=data.get("id", ""),
@@ -53,17 +53,14 @@ class LLMHandler(ABC):
     @abstractmethod
     def parse_response(self, response: Any) -> LLMResponse:
         """Parse raw LLM response into standardized format."""
-        pass
 
     @abstractmethod
-    def create_tool_message(self, tool_call: ToolCall, result: Any) -> Dict:
+    def create_tool_message(self, tool_call: ToolCall, result: Any) -> dict:
         """Create a tool result message for the conversation history."""
-        pass
 
     @abstractmethod
     def _iterate_stream(self, response: Any) -> Generator:
         """Iterate through streaming response chunks."""
-        pass
 
     def process_message_flow(
         self,
@@ -144,8 +141,8 @@ class LLMHandler(ABC):
         return messages
 
     def _append_unsupported_attachments(
-        self, messages: List[Dict], attachments: List[Dict]
-    ) -> List[Dict]:
+        self, messages: list[dict], attachments: list[dict]
+    ) -> list[dict]:
         """
         Default method to append unsupported attachment content to system prompt.
 
@@ -222,7 +219,7 @@ class LLMHandler(ABC):
 
                 updated_messages.append(self.create_tool_message(call, tool_response))
             except Exception as e:
-                logger.error(f"Error executing tool: {str(e)}", exc_info=True)
+                logger.exception(f"Error executing tool: {str(e)}")
                 error_call = ToolCall(
                     id=call.id, name=call.name, arguments=call.arguments
                 )

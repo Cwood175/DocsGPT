@@ -1,5 +1,4 @@
 """Simple reader that reads files of different formats from a directory."""
-import logging
 from pathlib import Path
 from typing import Callable, Dict, List, Optional, Union
 
@@ -10,25 +9,26 @@ from application.parser.file.epub_parser import EpubParser
 from application.parser.file.html_parser import HTMLParser
 from application.parser.file.markdown_parser import MarkdownParser
 from application.parser.file.rst_parser import RstParser
-from application.parser.file.tabular_parser import PandasCSVParser,ExcelParser
+from application.parser.file.tabular_parser import PandasCSVParser, ExcelParser
 from application.parser.file.json_parser import JSONParser
 from application.parser.file.pptx_parser import PPTXParser
 from application.parser.file.image_parser import ImageParser
 from application.parser.schema.base import Document
 from application.utils import num_tokens_from_string
+import logging
 
-DEFAULT_FILE_EXTRACTOR: Dict[str, BaseParser] = {
+DEFAULT_FILE_EXTRACTOR: dict[str, BaseParser] = {
     ".pdf": PDFParser(),
     ".docx": DocxParser(),
     ".csv": PandasCSVParser(),
-    ".xlsx":ExcelParser(),
+    ".xlsx": ExcelParser(),
     ".epub": EpubParser(),
     ".md": MarkdownParser(),
     ".rst": RstParser(),
     ".html": HTMLParser(),
     ".mdx": MarkdownParser(),
-    ".json":JSONParser(),
-    ".pptx":PPTXParser(),
+    ".json": JSONParser(),
+    ".pptx": PPTXParser(),
     ".png": ImageParser(),
     ".jpg": ImageParser(),
     ".jpeg": ImageParser(),
@@ -63,15 +63,15 @@ class SimpleDirectoryReader(BaseReader):
 
     def __init__(
             self,
-            input_dir: Optional[str] = None,
-            input_files: Optional[List] = None,
+            input_dir: str | None = None,
+            input_files: list | None = None,
             exclude_hidden: bool = True,
             errors: str = "ignore",
             recursive: bool = True,
-            required_exts: Optional[List[str]] = None,
-            file_extractor: Optional[Dict[str, BaseParser]] = None,
-            num_files_limit: Optional[int] = None,
-            file_metadata: Optional[Callable[[str], Dict]] = None,
+            required_exts: list[str] | None = None,
+            file_extractor: dict[str, BaseParser] | None = None,
+            num_files_limit: int | None = None,
+            file_metadata: Callable[[str], dict] | None = None,
     ) -> None:
         """Initialize with parameters."""
         super().__init__()
@@ -182,9 +182,8 @@ class SimpleDirectoryReader(BaseReader):
             else:
                 base_metadata['source'] = str(input_file)
 
-            if self.file_metadata is not None:
-                custom_metadata = self.file_metadata(input_file.name)
-                base_metadata.update(custom_metadata)
+            custom_metadata = self.file_metadata(input_file.name)
+            base_metadata.update(custom_metadata)
 
             if isinstance(data, List):
                 # Extend data_list with each item in the data list

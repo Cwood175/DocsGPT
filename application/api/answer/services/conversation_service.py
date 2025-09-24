@@ -1,9 +1,9 @@
-import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from application.core.mongo_db import MongoDB
+import logging
 
+from application.core.mongo_db import MongoDB
 from application.core.settings import settings
 from bson import ObjectId
 
@@ -20,7 +20,7 @@ class ConversationService:
 
     def get_conversation(
         self, conversation_id: str, user_id: str
-    ) -> Optional[Dict[str, Any]]:
+    ) -> Optional[dict[str, Any]]:
         """Retrieve a conversation with proper access control"""
         if not conversation_id or not user_id:
             return None
@@ -62,10 +62,8 @@ class ConversationService:
         attachment_ids: Optional[List[str]] = None,
     ) -> str:
         """Save or update a conversation in the database"""
-        user_id = decoded_token.get("sub")
-        if not user_id:
-            raise ValueError("User ID not found in token")
-        current_time = datetime.now(timezone.utc)
+        user_id = decoded_token["sub"]
+        current_time = datetime.now(tz=timezone.utc)
         
         # clean up in sources array such that we save max 1k characters for text part
         for source in sources:
