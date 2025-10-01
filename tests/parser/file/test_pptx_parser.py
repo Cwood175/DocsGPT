@@ -1,6 +1,7 @@
-import pytest
 from pathlib import Path
 from unittest.mock import patch
+
+import pytest
 
 from application.parser.file.pptx_parser import PPTXParser
 
@@ -18,12 +19,15 @@ def _fake_presentation_with(slides_shapes_texts):
         def __init__(self, text=None):
             if text is not None:
                 self.text = text
+
     class Slide:
         def __init__(self, texts):
             self.shapes = [Shape(t) for t in texts]
+
     class Pres:
         def __init__(self, _file):
             self.slides = [Slide(texts) for texts in slides_shapes_texts]
+
     return Pres
 
 
@@ -32,6 +36,7 @@ def test_pptx_parser_concat_true():
     FakePres = _fake_presentation_with(slides)
     import sys
     import types
+
     fake_pptx = types.ModuleType("pptx")
     fake_pptx.Presentation = FakePres
     parser = PPTXParser()
@@ -45,6 +50,7 @@ def test_pptx_parser_list_mode():
     FakePres = _fake_presentation_with(slides)
     import sys
     import types
+
     fake_pptx = types.ModuleType("pptx")
     fake_pptx.Presentation = FakePres
     parser = PPTXParser()
@@ -57,7 +63,9 @@ def test_pptx_parser_list_mode():
 def test_pptx_parser_import_error():
     parser = PPTXParser()
     import sys
-    with patch.dict(sys.modules, {"pptx": None}):
-        with pytest.raises(ImportError, match="pptx module is required to read .PPTX files"):
-            parser.parse_file(Path("missing.pptx"))
 
+    with (
+        patch.dict(sys.modules, {"pptx": None}),
+        pytest.raises(ImportError, match="pptx module is required to read .PPTX files"),
+    ):
+        parser.parse_file(Path("missing.pptx"))

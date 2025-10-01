@@ -6,19 +6,17 @@ import dotenv
 from flask import Flask, jsonify, redirect, request
 from jose import jwt
 
+from application.api import api
+from application.api.answer import answer
+from application.api.connector.routes import connector
+from application.api.internal.routes import internal
+from application.api.user.routes import user
 from application.auth import handle_auth
-
+from application.celery_init import celery
 from application.core.logging_config import setup_logging
+from application.core.settings import settings
 
 setup_logging()
-
-from application.api import api  # noqa: E402
-from application.api.answer import answer  # noqa: E402
-from application.api.internal.routes import internal  # noqa: E402
-from application.api.user.routes import user  # noqa: E402
-from application.api.connector.routes import connector  # noqa: E402
-from application.celery_init import celery  # noqa: E402
-from application.core.settings import settings  # noqa: E402
 
 
 if platform.system() == "Windows":
@@ -51,7 +49,7 @@ if settings.AUTH_TYPE in ("simple_jwt", "session_jwt") and not settings.JWT_SECR
         with open(key_file, "w") as f:
             f.write(new_key)
         settings.JWT_SECRET_KEY = new_key
-    except Exception as e:
+    except (OSError, ValueError) as e:
         raise RuntimeError(f"Failed to setup JWT_SECRET_KEY: {e}")
 SIMPLE_JWT_TOKEN = None
 if settings.AUTH_TYPE == "simple_jwt":
@@ -81,9 +79,7 @@ def get_config():
 def generate_token():
     if settings.AUTH_TYPE == "session_jwt":
         new_user_id = str(uuid.uuid4())
-        token = jwt.encode(
-            {"sub": new_user_id}, settings.JWT_SECRET_KEY, algorithm="HS256"
-        )
+        token = jwt.encode({"sub": new_user_id}, settings.JWT_SECRET_KEY, algorithm="HS256")
         return jsonify({"token": token})
     return jsonify({"error": "Token generation not allowed in current auth mode"}), 400
 
@@ -105,9 +101,7 @@ def authenticate_request():
 def after_request(response):
     response.headers.add("Access-Control-Allow-Origin", "*")
     response.headers.add("Access-Control-Allow-Headers", "Content-Type, Authorization")
-    response.headers.add(
-        "Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS"
-    )
+    response.headers.add("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
     return response
 
 

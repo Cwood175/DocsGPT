@@ -1,7 +1,7 @@
 import logging
 import uuid
 from abc import ABC, abstractmethod
-from typing import Dict, Generator, List, Optional
+from collections.abc import Generator
 
 from bson.objectid import ObjectId
 
@@ -11,7 +11,7 @@ from application.core.mongo_db import MongoDB
 from application.core.settings import settings
 from application.llm.handlers.handler_creator import LLMHandlerCreator
 from application.llm.llm_creator import LLMCreator
-from application.logging import build_stack_data, log_activity, LogContext
+from application.logging import LogContext, build_stack_data, log_activity
 from application.retriever.base import BaseRetriever
 
 logger = logging.getLogger(__name__)
@@ -24,12 +24,12 @@ class BaseAgent(ABC):
         llm_name: str,
         gpt_model: str,
         api_key: str,
-        user_api_key: Optional[str] = None,
+        user_api_key: str | None = None,
         prompt: str = "",
-        chat_history: Optional[List[Dict]] = None,
-        decoded_token: Optional[Dict] = None,
-        attachments: Optional[List[Dict]] = None,
-        json_schema: Optional[Dict] = None,
+        chat_history: list[dict] | None = None,
+        decoded_token: dict | None = None,
+        attachments: list[dict] | None = None,
+        json_schema: dict | None = None,
     ):
         self.endpoint = endpoint
         self.llm_name = llm_name
@@ -39,35 +39,34 @@ class BaseAgent(ABC):
         self.prompt = prompt
         self.decoded_token = decoded_token or {}
         self.user: str = decoded_token.get("sub")
-        self.tool_config: Dict = {}
-        self.tools: List[Dict] = []
-        self.tool_calls: List[Dict] = []
-        self.chat_history: List[Dict] = chat_history if chat_history is not None else []
+        self.tool_config: dict = {}
+        self.tools: list[dict] = []
+        self.tool_calls: list[dict] = []
+        self.chat_history: list[dict] = chat_history if chat_history is not None else []
         self.llm = LLMCreator.create_llm(
             llm_name,
             api_key=api_key,
             user_api_key=user_api_key,
             decoded_token=decoded_token,
         )
-        self.llm_handler = LLMHandlerCreator.create_handler(
-            llm_name if llm_name else "default"
-        )
+        self.llm_handler = LLMHandlerCreator.create_handler(llm_name if llm_name else "default")
         self.attachments = attachments or []
         self.json_schema = json_schema
 
     @log_activity()
     def gen(
-        self, query: str, retriever: BaseRetriever, log_context: LogContext = None
-    ) -> Generator[Dict, None, None]:
+        self,
+        query: str,
+        retriever: BaseRetriever,
+        log_context: LogContext | None = None,
+    ) -> Generator[dict, None, None]:
         yield from self._gen_inner(query, retriever, log_context)
 
     @abstractmethod
-    def _gen_inner(
-        self, query: str, retriever: BaseRetriever, log_context: LogContext
-    ) -> Generator[Dict, None, None]:
+    def _gen_inner(self, query: str, retriever: BaseRetriever, log_context: LogContext) -> Generator[dict, None, None]:
         pass
 
-    def _get_tools(self, api_key: str = None) -> Dict[str, Dict]:
+    def _get_tools(self, api_key: str | None = None) -> dict[str, dict]:
         mongo = MongoDB.get_client()
         db = mongo[settings.MONGO_DB_NAME]
         agents_collection = db["agents"]
@@ -76,13 +75,7 @@ class BaseAgent(ABC):
         agent_data = agents_collection.find_one({"key": api_key or self.user_api_key})
         tool_ids = agent_data.get("tools", []) if agent_data else []
 
-        tools = (
-            tools_collection.find(
-                {"_id": {"$in": [ObjectId(tool_id) for tool_id in tool_ids]}}
-            )
-            if tool_ids
-            else []
-        )
+        tools = tools_collection.find({"_id": {"$in": [ObjectId(tool_id) for tool_id in tool_ids]}}) if tool_ids else []
         tools = list(tools)
         tools_by_id = {str(tool["_id"]): tool for tool in tools} if tools else {}
 
@@ -104,9 +97,7 @@ class BaseAgent(ABC):
                 for k, v in action[param_type]["properties"].items():
                     if v.get("filled_by_llm", True):
                         params["properties"][k] = {
-                            key: value
-                            for key, value in v.items()
-                            if key != "filled_by_llm" and key != "value"
+                            key: value for key, value in v.items() if key != "filled_by_llm" and key != "value"
                         }
 
                         params["required"].append(k)
@@ -127,11 +118,7 @@ class BaseAgent(ABC):
                 (tool["name"] == "api_tool" and "actions" in tool.get("config", {}))
                 or (tool["name"] != "api_tool" and "actions" in tool)
             )
-            for action in (
-                tool["config"]["actions"].values()
-                if tool["name"] == "api_tool"
-                else tool["actions"]
-            )
+            for action in (tool["config"]["actions"].values() if tool["name"] == "api_tool" else tool["actions"])
             if action.get("active", True)
         ]
 
@@ -186,11 +173,7 @@ class BaseAgent(ABC):
         action_data = (
             tool_data["config"]["actions"][action_name]
             if tool_data["name"] == "api_tool"
-            else next(
-                action
-                for action in tool_data["actions"]
-                if action["name"] == action_name
-            )
+            else next(action for action in tool_data["actions"] if action["name"] == action_name)
         )
 
         query_params, headers, body, parameters = {}, {}, {}, {}
@@ -208,9 +191,7 @@ class BaseAgent(ABC):
                         target_dict[param] = details["value"]
         for param, value in call_args.items():
             for param_type, target_dict in param_types.items():
-                if param_type in action_data and param in action_data[param_type].get(
-                    "properties", {}
-                ):
+                if param_type in action_data and param in action_data[param_type].get("properties", {}):
                     target_dict[param] = value
         tm = ToolManager(config={})
         tool = tm.load_tool(
@@ -228,16 +209,12 @@ class BaseAgent(ABC):
             user_id=self.user,  # Pass user ID for MCP tools credential decryption
         )
         if tool_data["name"] == "api_tool":
-            print(
-                f"Executing api: {action_name} with query_params: {query_params}, headers: {headers}, body: {body}"
-            )
+            print(f"Executing api: {action_name} with query_params: {query_params}, headers: {headers}, body: {body}")
             result = tool.execute_action(action_name, **body)
         else:
             print(f"Executing tool: {action_name} with args: {call_args}")
             result = tool.execute_action(action_name, **parameters)
-        tool_call_data["result"] = (
-            f"{str(result)[:50]}..." if len(str(result)) > 50 else result
-        )
+        tool_call_data["result"] = f"{str(result)[:50]}..." if len(str(result)) > 50 else result
 
         yield {"type": "tool_call", "data": {**tool_call_data, "status": "completed"}}
         self.tool_calls.append(tool_call_data)
@@ -249,9 +226,7 @@ class BaseAgent(ABC):
             {
                 **tool_call,
                 "result": (
-                    f"{str(tool_call['result'])[:50]}..."
-                    if len(str(tool_call["result"])) > 50
-                    else tool_call["result"]
+                    f"{str(tool_call['result'])[:50]}..." if len(str(tool_call["result"])) > 50 else tool_call["result"]
                 ),
                 "status": "completed",
             }
@@ -262,8 +237,8 @@ class BaseAgent(ABC):
         self,
         system_prompt: str,
         query: str,
-        retrieved_data: List[Dict],
-    ) -> List[Dict]:
+        retrieved_data: list[dict],
+    ) -> list[dict]:
         docs_with_filenames = []
         for doc in retrieved_data:
             filename = doc.get("filename") or doc.get("title") or doc.get("source")
@@ -299,12 +274,8 @@ class BaseAgent(ABC):
                         }
                     }
 
-                    messages_combine.append(
-                        {"role": "assistant", "content": [function_call_dict]}
-                    )
-                    messages_combine.append(
-                        {"role": "tool", "content": [function_response_dict]}
-                    )
+                    messages_combine.append({"role": "assistant", "content": [function_call_dict]})
+                    messages_combine.append({"role": "tool", "content": [function_response_dict]})
         messages_combine.append({"role": "user", "content": query})
         return messages_combine
 
@@ -312,22 +283,18 @@ class BaseAgent(ABC):
         self,
         retriever: BaseRetriever,
         query: str,
-        log_context: Optional[LogContext] = None,
-    ) -> List[Dict]:
+        log_context: LogContext | None = None,
+    ) -> list[dict]:
         retrieved_data = retriever.search(query)
         if log_context:
             data = build_stack_data(retriever, exclude_attributes=["llm"])
             log_context.stacks.append({"component": "retriever", "data": data})
         return retrieved_data
 
-    def _llm_gen(self, messages: List[Dict], log_context: Optional[LogContext] = None):
+    def _llm_gen(self, messages: list[dict], log_context: LogContext | None = None):
         gen_kwargs = {"model": self.gpt_model, "messages": messages}
 
-        if (
-            hasattr(self.llm, "_supports_tools")
-            and self.llm._supports_tools
-            and self.tools
-        ):
+        if hasattr(self.llm, "_supports_tools") and self.llm._supports_tools and self.tools:
             gen_kwargs["tools"] = self.tools
 
         if (
@@ -335,9 +302,7 @@ class BaseAgent(ABC):
             and hasattr(self.llm, "_supports_structured_output")
             and self.llm._supports_structured_output()
         ):
-            structured_format = self.llm.prepare_structured_output_format(
-                self.json_schema
-            )
+            structured_format = self.llm.prepare_structured_output_format(self.json_schema)
             if structured_format:
                 if self.llm_name == "openai":
                     gen_kwargs["response_format"] = structured_format
@@ -354,14 +319,12 @@ class BaseAgent(ABC):
     def _llm_handler(
         self,
         resp,
-        tools_dict: Dict,
-        messages: List[Dict],
-        log_context: Optional[LogContext] = None,
-        attachments: Optional[List[Dict]] = None,
+        tools_dict: dict,
+        messages: list[dict],
+        log_context: LogContext | None = None,
+        attachments: list[dict] | None = None,
     ):
-        resp = self.llm_handler.process_message_flow(
-            self, resp, tools_dict, messages, attachments, True
-        )
+        resp = self.llm_handler.process_message_flow(self, resp, tools_dict, messages, attachments, True)
         if log_context:
             data = build_stack_data(self.llm_handler, exclude_attributes=["tool_calls"])
             log_context.stacks.append({"component": "llm_handler", "data": data})
@@ -388,9 +351,7 @@ class BaseAgent(ABC):
                 answer_data["schema"] = self.json_schema
             yield answer_data
             return
-        processed_response_gen = self._llm_handler(
-            response, tools_dict, messages, log_context, self.attachments
-        )
+        processed_response_gen = self._llm_handler(response, tools_dict, messages, log_context, self.attachments)
 
         for event in processed_response_gen:
             if isinstance(event, str):

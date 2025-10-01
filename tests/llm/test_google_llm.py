@@ -1,7 +1,9 @@
 import types
+
 import pytest
 
 from application.llm.google_ai import GoogleLLM
+
 
 class _FakePart:
     def __init__(self, text=None, function_call=None, file_data=None):
@@ -77,6 +79,7 @@ class FakeClient:
 def patch_google_modules(monkeypatch):
     # Patch the types module used by GoogleLLM
     import application.llm.google_ai as gmod
+
     monkeypatch.setattr(gmod, "types", FakeTypesModule)
     monkeypatch.setattr(gmod.genai, "Client", FakeClient)
 
@@ -85,11 +88,14 @@ def test_clean_messages_google_basic():
     llm = GoogleLLM(api_key="key")
     msgs = [
         {"role": "assistant", "content": "hi"},
-        {"role": "user", "content": [
-            {"text": "hello"},
-            {"files": [{"file_uri": "gs://x", "mime_type": "image/png"}]},
-            {"function_call": {"name": "fn", "args": {"a": 1}}},
-        ]},
+        {
+            "role": "user",
+            "content": [
+                {"text": "hello"},
+                {"files": [{"file_uri": "gs://x", "mime_type": "image/png"}]},
+                {"function_call": {"name": "fn", "args": {"a": 1}}},
+            ],
+        },
     ]
     cleaned = llm._clean_messages_google(msgs)
 
@@ -131,8 +137,7 @@ def test_prepare_structured_output_format_type_mapping():
 def test_prepare_messages_with_attachments_appends_files(monkeypatch):
     llm = GoogleLLM(api_key="key")
     llm.storage = types.SimpleNamespace(
-        file_exists=lambda path: True,
-        process_file=lambda path, processor_func, **kwargs: "gs://file_uri"
+        file_exists=lambda path: True, process_file=lambda path, processor_func, **kwargs: "gs://file_uri"
     )
     monkeypatch.setattr(llm, "_upload_file_to_google", lambda att: "gs://file_uri")
 
@@ -148,4 +153,3 @@ def test_prepare_messages_with_attachments_appends_files(monkeypatch):
     files_entry = next((p for p in user_msg["content"] if isinstance(p, dict) and "files" in p), None)
     assert files_entry is not None
     assert isinstance(files_entry["files"], list) and len(files_entry["files"]) == 2
-

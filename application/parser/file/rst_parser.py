@@ -3,9 +3,10 @@
 Contains parser for md files.
 
 """
+
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 from application.parser.file.base_parser import BaseParser
 
@@ -19,17 +20,17 @@ class RstParser(BaseParser):
     """
 
     def __init__(
-            self,
-            *args: Any,
-            remove_hyperlinks: bool = True,
-            remove_images: bool = True,
-            remove_table_excess: bool = True,
-            remove_interpreters: bool = True,
-            remove_directives: bool = True,
-            remove_whitespaces_excess: bool = True,
-            # Be careful with remove_characters_excess, might cause data loss
-            remove_characters_excess: bool = True,
-            **kwargs: Any,
+        self,
+        *args: Any,
+        remove_hyperlinks: bool = True,
+        remove_images: bool = True,
+        remove_table_excess: bool = True,
+        remove_interpreters: bool = True,
+        remove_directives: bool = True,
+        remove_whitespaces_excess: bool = True,
+        # Be careful with remove_characters_excess, might cause data loss
+        remove_characters_excess: bool = True,
+        **kwargs: Any,
     ) -> None:
         """Init params."""
         super().__init__(*args, **kwargs)
@@ -41,13 +42,13 @@ class RstParser(BaseParser):
         self._remove_whitespaces_excess = remove_whitespaces_excess
         self._remove_characters_excess = remove_characters_excess
 
-    def rst_to_tups(self, rst_text: str) -> List[Tuple[Optional[str], str]]:
+    def rst_to_tups(self, rst_text: str) -> list[tuple[str | None, str]]:
         """Convert a reStructuredText file to a dictionary.
 
         The keys are the headers and the values are the text under each header.
 
         """
-        rst_tups: List[Tuple[Optional[str], str]] = []
+        rst_tups: list[tuple[str | None, str]] = []
         lines = rst_text.split("\n")
 
         current_header = None
@@ -55,14 +56,17 @@ class RstParser(BaseParser):
 
         for i, line in enumerate(lines):
             header_match = re.match(r"^[^\S\n]*[-=]+[^\S\n]*$", line)
-            if header_match and i > 0 and (
-                    len(lines[i - 1].strip()) == len(header_match.group().strip()) or lines[i - 2] == lines[i - 2]):
+            if (
+                header_match
+                and i > 0
+                and (len(lines[i - 1].strip()) == len(header_match.group().strip()) or lines[i - 2] == lines[i - 2])
+            ):
                 if current_header is not None:
                     if current_text == "" or None:
                         continue
                     # removes the next heading from current Document
                     if current_text.endswith(lines[i - 1] + "\n"):
-                        current_text = current_text[:len(current_text) - len(lines[i - 1] + "\n")]
+                        current_text = current_text[: len(current_text) - len(lines[i - 1] + "\n")]
                     rst_tups.append((current_header, current_text))
 
                 current_header = lines[i - 1]
@@ -86,30 +90,28 @@ class RstParser(BaseParser):
         #     ]
 
         if current_header is None:
-            rst_tups = [
-                (key, re.sub("\n", "", value)) for key, value in rst_tups
-            ]
+            rst_tups = [(key, re.sub("\n", "", value)) for key, value in rst_tups]
         return rst_tups
 
-    def chunk_by_token_count(self, text: str, max_tokens: int = 100) -> List[str]:
+    def chunk_by_token_count(self, text: str, max_tokens: int = 100) -> list[str]:
         """Chunk text by token count."""
-    
+
         avg_token_length = 5
-    
+
         chunk_size = max_tokens * avg_token_length
 
         chunks = []
         for i in range(0, len(text), chunk_size):
-            chunk = text[i:i+chunk_size]
+            chunk = text[i : i + chunk_size]
             if i + chunk_size < len(text):
-                last_space = chunk.rfind(' ')
+                last_space = chunk.rfind(" ")
                 if last_space != -1:
                     chunk = chunk[:last_space]
-            
+
             chunks.append(chunk.strip())
-        
+
         return chunks
-    
+
     def remove_images(self, content: str) -> str:
         pattern = r"\.\. image:: (.*)"
         content = re.sub(pattern, "", content)
@@ -138,25 +140,25 @@ class RstParser(BaseParser):
         content = re.sub(pattern, "", content, flags=re.MULTILINE)
         return content
 
-    def remove_whitespaces_excess(self, content: List[Tuple[str, Any]]) -> List[Tuple[str, Any]]:
+    def remove_whitespaces_excess(self, content: list[tuple[str, Any]]) -> list[tuple[str, Any]]:
         """Pattern to match 2 or more consecutive whitespaces"""
         pattern = r"\s{2,}"
         content = [(key, re.sub(pattern, "  ", value)) for key, value in content]
         return content
 
-    def remove_characters_excess(self, content: List[Tuple[str, Any]]) -> List[Tuple[str, Any]]:
+    def remove_characters_excess(self, content: list[tuple[str, Any]]) -> list[tuple[str, Any]]:
         """Pattern to match 2 or more consecutive characters"""
         pattern = r"(\S)\1{2,}"
         content = [(key, re.sub(pattern, r"\1\1\1", value, flags=re.MULTILINE)) for key, value in content]
         return content
 
-    def _init_parser(self) -> Dict:
+    def _init_parser(self) -> dict:
         """Initialize the parser with the config."""
         return {}
 
     def parse_tups(
-            self, filepath: Path, errors: str = "ignore",max_tokens: Optional[int] = 1000
-    ) -> List[Tuple[Optional[str], str]]:
+        self, filepath: Path, errors: str = "ignore", max_tokens: int | None = 1000
+    ) -> list[tuple[str | None, str]]:
         """Parse file into tuples."""
         with open(filepath, "r") as f:
             content = f.read()
@@ -183,12 +185,10 @@ class RstParser(BaseParser):
                 chunks = self.chunk_by_token_count(text, max_tokens)
                 for idx, chunk in enumerate(chunks):
                     chunked_tups.append((f"{header} - Chunk {idx + 1}", chunk))
-            return chunked_tups    
+            return chunked_tups
         return rst_tups
 
-    def parse_file(
-            self, filepath: Path, errors: str = "ignore"
-    ) -> Union[str, List[str]]:
+    def parse_file(self, filepath: Path, errors: str = "ignore") -> str | list[str]:
         """Parse file into string."""
         tups = self.parse_tups(filepath, errors=errors)
         results = []

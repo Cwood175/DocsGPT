@@ -1,7 +1,8 @@
-from application.llm.base import BaseLLM
-from application.core.settings import settings
-import json
 import io
+import json
+
+from application.core.settings import settings
+from application.llm.base import BaseLLM
 
 
 class LineIterator:
@@ -59,7 +60,6 @@ class LineIterator:
 
 
 class SagemakerAPILLM(BaseLLM):
-
     def __init__(self, api_key=None, user_api_key=None, *args, **kwargs):
         import boto3
 

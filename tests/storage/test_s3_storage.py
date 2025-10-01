@@ -1,9 +1,9 @@
-"""Tests for S3 storage implementation.
-"""
+"""Tests for S3 storage implementation."""
 
 import io
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 from botocore.exceptions import ClientError
 
 from application.storage.s3 import S3Storage
@@ -12,7 +12,7 @@ from application.storage.s3 import S3Storage
 @pytest.fixture
 def mock_boto3_client():
     """Mock boto3.client to isolate S3 client creation."""
-    with patch('boto3.client') as mock_client:
+    with patch("boto3.client") as mock_client:
         s3_mock = MagicMock()
         mock_client.return_value = s3_mock
         yield s3_mock
@@ -29,21 +29,19 @@ class TestS3StorageInitialization:
 
     def test_init_with_default_bucket(self):
         """Should use default bucket name when none provided."""
-        with patch('boto3.client'):
+        with patch("boto3.client"):
             storage = S3Storage()
             assert storage.bucket_name == "docsgpt-test-bucket"
 
     def test_init_with_custom_bucket(self):
         """Should use provided bucket name."""
-        with patch('boto3.client'):
+        with patch("boto3.client"):
             storage = S3Storage(bucket_name="custom-bucket")
             assert storage.bucket_name == "custom-bucket"
 
     def test_init_creates_boto3_client(self):
         """Should create boto3 S3 client with credentials from settings."""
-        with patch('boto3.client') as mock_client, \
-             patch('application.storage.s3.settings') as mock_settings:
-
+        with patch("boto3.client") as mock_client, patch("application.storage.s3.settings") as mock_settings:
             mock_settings.SAGEMAKER_ACCESS_KEY = "test-key"
             mock_settings.SAGEMAKER_SECRET_KEY = "test-secret"
             mock_settings.SAGEMAKER_REGION = "us-west-2"
@@ -51,10 +49,7 @@ class TestS3StorageInitialization:
             S3Storage()
 
             mock_client.assert_called_once_with(
-                "s3",
-                aws_access_key_id="test-key",
-                aws_secret_access_key="test-secret",
-                region_name="us-west-2"
+                "s3", aws_access_key_id="test-key", aws_secret_access_key="test-secret", region_name="us-west-2"
             )
 
 
@@ -66,22 +61,19 @@ class TestS3StorageSaveFile:
         file_data = io.BytesIO(b"test content")
         path = "documents/test.txt"
 
-        with patch('application.storage.s3.settings') as mock_settings:
+        with patch("application.storage.s3.settings") as mock_settings:
             mock_settings.SAGEMAKER_REGION = "us-east-1"
             result = s3_storage.save_file(file_data, path)
 
         mock_boto3_client.upload_fileobj.assert_called_once_with(
-            file_data,
-            "test-bucket",
-            path,
-            ExtraArgs={"StorageClass": "INTELLIGENT_TIERING"}
+            file_data, "test-bucket", path, ExtraArgs={"StorageClass": "INTELLIGENT_TIERING"}
         )
 
         assert result == {
             "storage_type": "s3",
             "bucket_name": "test-bucket",
             "uri": "s3://test-bucket/documents/test.txt",
-            "region": "us-east-1"
+            "region": "us-east-1",
         }
 
     def test_save_file_with_custom_storage_class(self, s3_storage, mock_boto3_client):
@@ -89,15 +81,12 @@ class TestS3StorageSaveFile:
         file_data = io.BytesIO(b"test content")
         path = "documents/test.txt"
 
-        with patch('application.storage.s3.settings') as mock_settings:
+        with patch("application.storage.s3.settings") as mock_settings:
             mock_settings.SAGEMAKER_REGION = "us-east-1"
             s3_storage.save_file(file_data, path, storage_class="STANDARD")
 
         mock_boto3_client.upload_fileobj.assert_called_once_with(
-            file_data,
-            "test-bucket",
-            path,
-            ExtraArgs={"StorageClass": "STANDARD"}
+            file_data, "test-bucket", path, ExtraArgs={"StorageClass": "STANDARD"}
         )
 
     def test_save_file_propagates_client_error(self, s3_storage, mock_boto3_client):
@@ -106,8 +95,7 @@ class TestS3StorageSaveFile:
         path = "documents/test.txt"
 
         mock_boto3_client.upload_fileobj.side_effect = ClientError(
-            {"Error": {"Code": "AccessDenied", "Message": "Access denied"}},
-            "upload_fileobj"
+            {"Error": {"Code": "AccessDenied", "Message": "Access denied"}}, "upload_fileobj"
         )
 
         with pytest.raises(ClientError):
@@ -125,17 +113,13 @@ class TestS3StorageFileExists:
         result = s3_storage.file_exists(path)
 
         assert result is True
-        mock_boto3_client.head_object.assert_called_once_with(
-            Bucket="test-bucket",
-            Key=path
-        )
+        mock_boto3_client.head_object.assert_called_once_with(Bucket="test-bucket", Key=path)
 
     def test_file_exists_returns_false_on_client_error(self, s3_storage, mock_boto3_client):
         """Should return False when head_object raises ClientError."""
         path = "documents/nonexistent.txt"
         mock_boto3_client.head_object.side_effect = ClientError(
-            {"Error": {"Code": "NoSuchKey", "Message": "Not found"}},
-            "head_object"
+            {"Error": {"Code": "NoSuchKey", "Message": "Not found"}}, "head_object"
         )
 
         result = s3_storage.file_exists(path)
@@ -168,8 +152,7 @@ class TestS3StorageGetFile:
         """Should raise FileNotFoundError when file doesn't exist."""
         path = "documents/nonexistent.txt"
         mock_boto3_client.head_object.side_effect = ClientError(
-            {"Error": {"Code": "NoSuchKey", "Message": "Not found"}},
-            "head_object"
+            {"Error": {"Code": "NoSuchKey", "Message": "Not found"}}, "head_object"
         )
 
         with pytest.raises(FileNotFoundError, match="File not found"):
@@ -187,17 +170,13 @@ class TestS3StorageDeleteFile:
         result = s3_storage.delete_file(path)
 
         assert result is True
-        mock_boto3_client.delete_object.assert_called_once_with(
-            Bucket="test-bucket",
-            Key=path
-        )
+        mock_boto3_client.delete_object.assert_called_once_with(Bucket="test-bucket", Key=path)
 
     def test_delete_file_returns_false_on_client_error(self, s3_storage, mock_boto3_client):
         """Should return False when deletion fails with ClientError."""
         path = "documents/test.txt"
         mock_boto3_client.delete_object.side_effect = ClientError(
-            {"Error": {"Code": "AccessDenied", "Message": "Access denied"}},
-            "delete_object"
+            {"Error": {"Code": "AccessDenied", "Message": "Access denied"}}, "delete_object"
         )
 
         result = s3_storage.delete_file(path)
@@ -219,7 +198,7 @@ class TestS3StorageListFiles:
                 "Contents": [
                     {"Key": "documents/file1.txt"},
                     {"Key": "documents/file2.txt"},
-                    {"Key": "documents/subdir/file3.txt"}
+                    {"Key": "documents/subdir/file3.txt"},
                 ]
             }
         ]
@@ -231,11 +210,8 @@ class TestS3StorageListFiles:
         assert "documents/file2.txt" in result
         assert "documents/subdir/file3.txt" in result
 
-        mock_boto3_client.get_paginator.assert_called_once_with('list_objects_v2')
-        paginator_mock.paginate.assert_called_once_with(
-            Bucket="test-bucket",
-            Prefix="documents/"
-        )
+        mock_boto3_client.get_paginator.assert_called_once_with("list_objects_v2")
+        paginator_mock.paginate.assert_called_once_with(Bucket="test-bucket", Prefix="documents/")
 
     def test_list_files_returns_empty_list_when_no_contents(self, s3_storage, mock_boto3_client):
         """Should return empty list when directory has no files."""
@@ -259,7 +235,7 @@ class TestS3StorageProcessFile:
 
         mock_boto3_client.head_object.return_value = {}
 
-        with patch('tempfile.NamedTemporaryFile') as mock_temp:
+        with patch("tempfile.NamedTemporaryFile") as mock_temp:
             mock_file = MagicMock()
             mock_file.name = "/tmp/test_file"
             mock_temp.return_value.__enter__.return_value = mock_file
@@ -275,8 +251,7 @@ class TestS3StorageProcessFile:
         """Should raise FileNotFoundError when file doesn't exist."""
         path = "documents/nonexistent.txt"
         mock_boto3_client.head_object.side_effect = ClientError(
-            {"Error": {"Code": "NoSuchKey", "Message": "Not found"}},
-            "head_object"
+            {"Error": {"Code": "NoSuchKey", "Message": "Not found"}}, "head_object"
         )
 
         processor_func = MagicMock()
@@ -292,18 +267,12 @@ class TestS3StorageIsDirectory:
         """Should return True when objects exist with the directory prefix."""
         path = "documents/"
 
-        mock_boto3_client.list_objects_v2.return_value = {
-            "Contents": [{"Key": "documents/file1.txt"}]
-        }
+        mock_boto3_client.list_objects_v2.return_value = {"Contents": [{"Key": "documents/file1.txt"}]}
 
         result = s3_storage.is_directory(path)
 
         assert result is True
-        mock_boto3_client.list_objects_v2.assert_called_once_with(
-            Bucket="test-bucket",
-            Prefix="documents/",
-            MaxKeys=1
-        )
+        mock_boto3_client.list_objects_v2.assert_called_once_with(Bucket="test-bucket", Prefix="documents/", MaxKeys=1)
 
     def test_is_directory_returns_false_when_no_objects_exist(self, s3_storage, mock_boto3_client):
         """Should return False when no objects exist with the directory prefix."""
@@ -326,19 +295,11 @@ class TestS3StorageRemoveDirectory:
         paginator_mock = MagicMock()
         mock_boto3_client.get_paginator.return_value = paginator_mock
         paginator_mock.paginate.return_value = [
-            {
-                "Contents": [
-                    {"Key": "documents/file1.txt"},
-                    {"Key": "documents/file2.txt"}
-                ]
-            }
+            {"Contents": [{"Key": "documents/file1.txt"}, {"Key": "documents/file2.txt"}]}
         ]
 
         mock_boto3_client.delete_objects.return_value = {
-            "Deleted": [
-                {"Key": "documents/file1.txt"},
-                {"Key": "documents/file2.txt"}
-            ]
+            "Deleted": [{"Key": "documents/file1.txt"}, {"Key": "documents/file2.txt"}]
         }
 
         result = s3_storage.remove_directory(directory)
@@ -368,13 +329,10 @@ class TestS3StorageRemoveDirectory:
 
         paginator_mock = MagicMock()
         mock_boto3_client.get_paginator.return_value = paginator_mock
-        paginator_mock.paginate.return_value = [
-            {"Contents": [{"Key": "documents/file1.txt"}]}
-        ]
+        paginator_mock.paginate.return_value = [{"Contents": [{"Key": "documents/file1.txt"}]}]
 
         mock_boto3_client.delete_objects.side_effect = ClientError(
-            {"Error": {"Code": "AccessDenied", "Message": "Access denied"}},
-            "delete_objects"
+            {"Error": {"Code": "AccessDenied", "Message": "Access denied"}}, "delete_objects"
         )
 
         result = s3_storage.remove_directory(directory)

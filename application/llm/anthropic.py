@@ -1,24 +1,19 @@
-from application.llm.base import BaseLLM
 from application.core.settings import settings
+from application.llm.base import BaseLLM
 
 
 class AnthropicLLM(BaseLLM):
-
     def __init__(self, api_key=None, user_api_key=None, *args, **kwargs):
-        from anthropic import Anthropic, HUMAN_PROMPT, AI_PROMPT
+        from anthropic import AI_PROMPT, HUMAN_PROMPT, Anthropic
 
         super().__init__(*args, **kwargs)
-        self.api_key = (
-            api_key or settings.ANTHROPIC_API_KEY
-        )  # If not provided, use a default from settings
+        self.api_key = api_key or settings.ANTHROPIC_API_KEY  # If not provided, use a default from settings
         self.user_api_key = user_api_key
         self.anthropic = Anthropic(api_key=self.api_key)
         self.HUMAN_PROMPT = HUMAN_PROMPT
         self.AI_PROMPT = AI_PROMPT
 
-    def _raw_gen(
-        self, baseself, model, messages, stream=False, tools=None, max_tokens=300, **kwargs
-    ):
+    def _raw_gen(self, baseself, model, messages, stream=False, tools=None, max_tokens=300, **kwargs):
         context = messages[0]["content"]
         user_question = messages[-1]["content"]
         prompt = f"### Context \n {context} \n ### Question \n {user_question}"
@@ -33,9 +28,7 @@ class AnthropicLLM(BaseLLM):
         )
         return completion.completion
 
-    def _raw_gen_stream(
-        self, baseself, model, messages, stream=True, tools=None, max_tokens=300, **kwargs
-    ):
+    def _raw_gen_stream(self, baseself, model, messages, stream=True, tools=None, max_tokens=300, **kwargs):
         context = messages[0]["content"]
         user_question = messages[-1]["content"]
         prompt = f"### Context \n {context} \n ### Question \n {user_question}"

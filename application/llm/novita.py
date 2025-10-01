@@ -1,5 +1,6 @@
-from application.llm.base import BaseLLM
 from openai import OpenAI
+
+from application.llm.base import BaseLLM
 
 
 class NovitaLLM(BaseLLM):
@@ -16,17 +17,11 @@ class NovitaLLM(BaseLLM):
             )
             return response.choices[0]
         else:
-            response = self.client.chat.completions.create(
-                model=model, messages=messages, stream=stream, **kwargs
-            )
+            response = self.client.chat.completions.create(model=model, messages=messages, stream=stream, **kwargs)
             return response.choices[0].message.content
 
-    def _raw_gen_stream(
-        self, baseself, model, messages, stream=True, tools=None, **kwargs
-    ):
-        response = self.client.chat.completions.create(
-            model=model, messages=messages, stream=stream, **kwargs
-        )
+    def _raw_gen_stream(self, baseself, model, messages, stream=True, tools=None, **kwargs):
+        response = self.client.chat.completions.create(model=model, messages=messages, stream=stream, **kwargs)
         for line in response:
             if line.choices[0].delta.content is not None:
                 yield line.choices[0].delta.content

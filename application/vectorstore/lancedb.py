@@ -1,15 +1,19 @@
-from typing import List, Optional
 import importlib
-from application.vectorstore.base import BaseVectorStore
+
 from application.core.settings import settings
+from application.vectorstore.base import BaseVectorStore
+
 
 class LanceDBVectorStore(BaseVectorStore):
     """Class for LanceDB Vector Store integration."""
 
-    def __init__(self, path: str = settings.LANCEDB_PATH,
-                 table_name_prefix: str = settings.LANCEDB_TABLE_NAME,
-                 source_id: str = None,
-                 embeddings_key: str = "embeddings"):
+    def __init__(
+        self,
+        path: str = settings.LANCEDB_PATH,
+        table_name_prefix: str = settings.LANCEDB_TABLE_NAME,
+        source_id: str | None = None,
+        embeddings_key: str = "embeddings",
+    ):
         """Initialize the LanceDB vector store."""
         super().__init__()
         self.path = path
@@ -54,17 +58,21 @@ class LanceDBVectorStore(BaseVectorStore):
         """Ensure the table exists before performing operations."""
         if self.table is None:
             embeddings = self._get_embeddings(settings.EMBEDDINGS_NAME, self.embeddings_key)
-            schema = self.pa.schema([
-                self.pa.field("vector", self.pa.list_(self.pa.float32(), list_size=embeddings.dimension)),
-                self.pa.field("text", self.pa.string()),
-                self.pa.field("metadata", self.pa.struct([
-                    self.pa.field("key", self.pa.string()),
-                    self.pa.field("value", self.pa.string())
-                ]))
-            ])
+            schema = self.pa.schema(
+                [
+                    self.pa.field("vector", self.pa.list_(self.pa.float32(), list_size=embeddings.dimension)),
+                    self.pa.field("text", self.pa.string()),
+                    self.pa.field(
+                        "metadata",
+                        self.pa.struct(
+                            [self.pa.field("key", self.pa.string()), self.pa.field("value", self.pa.string())]
+                        ),
+                    ),
+                ]
+            )
             self.docsearch = self.lance_db.create_table(self.table_name, schema=schema)
 
-    def add_texts(self, texts: List[str], metadatas: Optional[List[dict]] = None, source_id: str = None):
+    def add_texts(self, texts: list[str], metadatas: list[dict] | None = None, source_id: str | None = None):
         """Add texts with metadata and their embeddings to the LanceDB table."""
         embeddings = self._get_embeddings(settings.EMBEDDINGS_NAME, self.embeddings_key).embed_documents(texts)
         vectors = []
@@ -72,11 +80,7 @@ class LanceDBVectorStore(BaseVectorStore):
             if source_id:
                 metadata["source_id"] = source_id
             metadata_struct = [{"key": k, "value": str(v)} for k, v in metadata.items()]
-            vectors.append({
-                "vector": embedding,
-                "text": text,
-                "metadata": metadata_struct
-            })
+            vectors.append({"vector": embedding, "text": text, "metadata": metadata_struct})
         self.ensure_table_exists()
         self.docsearch.add(vectors)
 
@@ -103,17 +107,19 @@ class LanceDBVectorStore(BaseVectorStore):
                     f"!= table index dimension ({table_index_dimension})"
                 )
 
-    def filter_documents(self, filter_condition: dict) -> List[dict]:
+    def filter_documents(self, filter_condition: dict) -> list[dict]:
         """Filter documents based on certain conditions."""
         self.ensure_table_exists()
 
         # Ensure source_id exists in the filter condition
-        if 'source_id' not in filter_condition:
+        if "source_id" not in filter_condition:
             raise ValueError("filter_condition must contain 'source_id'")
 
         source_id = filter_condition["source_id"]
 
         # Use LanceDB's native filtering if supported, otherwise filter manually
-        filtered_data = self.docsearch.filter(lambda x: x.metadata and x.metadata.get("source_id") == source_id).to_list()
+        filtered_data = self.docsearch.filter(
+            lambda x: x.metadata and x.metadata.get("source_id") == source_id
+        ).to_list()
 
         return filtered_data

@@ -1,4 +1,5 @@
 import types
+
 import pytest
 
 from application.llm.openai import OpenAILLM
@@ -37,21 +38,20 @@ class FakeChatCompletions:
             return self._choices
 
         def __iter__(self):
-            for line in self._lines:
-                yield line
+            yield from self._lines
 
     def create(self, **kwargs):
         self.last_kwargs = kwargs
         # default non-streaming: return content
         if not kwargs.get("stream"):
-            return FakeChatCompletions._Response(choices=[
-                FakeChatCompletions._Choice(content="hello world")
-            ])
+            return FakeChatCompletions._Response(choices=[FakeChatCompletions._Choice(content="hello world")])
         # streaming: yield line objects each with choices[0].delta.content
-        return FakeChatCompletions._Response(lines=[
-            FakeChatCompletions._StreamLine(["part1"]),
-            FakeChatCompletions._StreamLine(["part2"]),
-        ])
+        return FakeChatCompletions._Response(
+            lines=[
+                FakeChatCompletions._StreamLine(["part1"]),
+                FakeChatCompletions._StreamLine(["part2"]),
+            ]
+        )
 
 
 class FakeClient:
@@ -74,13 +74,16 @@ def openai_llm(monkeypatch):
 def test_clean_messages_openai_variants(openai_llm):
     messages = [
         {"role": "system", "content": "sys"},
-        {"role": "model", "content": "asst"}, 
-        {"role": "user", "content": [
-            {"text": "hello"},
-            {"function_call": {"call_id": "c1", "name": "fn", "args": {"a": 1}}},
-            {"function_response": {"call_id": "c1", "name": "fn", "response": {"result": 42}}},
-            {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAA"}},
-        ]},
+        {"role": "model", "content": "asst"},
+        {
+            "role": "user",
+            "content": [
+                {"text": "hello"},
+                {"function_call": {"call_id": "c1", "name": "fn", "args": {"a": 1}}},
+                {"function_response": {"call_id": "c1", "name": "fn", "response": {"result": 42}}},
+                {"type": "image_url", "image_url": {"url": "data:image/png;base64,AAA"}},
+            ],
+        },
     ]
 
     cleaned = openai_llm._clean_messages_openai(messages)
@@ -89,9 +92,12 @@ def test_clean_messages_openai_variants(openai_llm):
     assert roles.count("assistant") >= 1
     assert any(m["role"] == "tool" for m in cleaned)
 
-    assert any(isinstance(m["content"], list) and any(
-        part.get("type") == "image_url" for part in m["content"] if isinstance(part, dict)
-    ) for m in cleaned if m["role"] == "user")
+    assert any(
+        isinstance(m["content"], list)
+        and any(part.get("type") == "image_url" for part in m["content"] if isinstance(part, dict))
+        for m in cleaned
+        if m["role"] == "user"
+    )
 
 
 def test_raw_gen_calls_openai_client_and_returns_content(openai_llm):
@@ -154,4 +160,3 @@ def test_prepare_messages_with_attachments_image_and_pdf(openai_llm, monkeypatch
         isinstance(p, dict) and p.get("image_url") for p in user_msg["content"]
     )
     assert any(isinstance(p, dict) and p.get("file", {}).get("file_id") == "file_xyz" for p in user_msg["content"])
-

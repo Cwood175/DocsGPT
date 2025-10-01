@@ -1,17 +1,23 @@
 import logging
-import requests
 import re  # Import regular expression library
 import xml.etree.ElementTree as ET
+
+import requests
+
 from application.parser.remote.base import BaseRemote
+
+logger = logging.getLogger(__name__)
+
 
 class SitemapLoader(BaseRemote):
     def __init__(self, limit=20):
         from langchain_community.document_loaders import WebBaseLoader
+
         self.loader = WebBaseLoader
         self.limit = limit  # Adding limit to control the number of URLs to process
 
     def load_data(self, inputs):
-        sitemap_url= inputs
+        sitemap_url = inputs
         # Check if the input is a list and if it is, use the first element
         if isinstance(sitemap_url, list) and sitemap_url:
             url = sitemap_url[0]
@@ -33,7 +39,7 @@ class SitemapLoader(BaseRemote):
                 documents.extend(loader.load())
                 processed_urls += 1  # Increment the counter after processing each URL
             except Exception as e:
-                logging.error(f"Error processing URL {url}: {e}", exc_info=True)
+                logger.exception(f"Error processing URL {url}: {e}")
                 continue
 
         return documents
@@ -50,32 +56,29 @@ class SitemapLoader(BaseRemote):
         if self._is_sitemap(response):
             # It's a sitemap, so parse it and extract URLs
             return self._parse_sitemap(response.content)
-        else:
-            # It's not a sitemap, return the URL itself
-            return [sitemap_url]
+
+        # It's not a sitemap, return the URL itself
+        return [sitemap_url]
 
     def _is_sitemap(self, response):
-        content_type = response.headers.get('Content-Type', '')
-        if 'xml' in content_type or response.url.endswith('.xml'):
+        content_type = response.headers.get("Content-Type", "")
+        if "xml" in content_type or response.url.endswith(".xml"):
             return True
 
-        if '<sitemapindex' in response.text or '<urlset' in response.text:
-            return True
-
-        return False
+        return "<sitemapindex" in response.text or "<urlset" in response.text
 
     def _parse_sitemap(self, sitemap_content):
         # Remove namespaces
-        sitemap_content = re.sub(' xmlns="[^"]+"', '', sitemap_content.decode('utf-8'), count=1)
+        sitemap_content = re.sub(' xmlns="[^"]+"', "", sitemap_content.decode("utf-8"), count=1)
 
         root = ET.fromstring(sitemap_content)
 
         urls = []
-        for loc in root.findall('.//url/loc'):
+        for loc in root.findall(".//url/loc"):
             urls.append(loc.text)
 
         # Check for nested sitemaps
-        for sitemap in root.findall('.//sitemap/loc'):
+        for sitemap in root.findall(".//sitemap/loc"):
             nested_sitemap_url = sitemap.text
             urls.extend(self._extract_urls(nested_sitemap_url))
 

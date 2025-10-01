@@ -1,10 +1,15 @@
 import logging
+from urllib.parse import urljoin, urlparse
+
 import requests
-from urllib.parse import urlparse, urljoin
 from bs4 import BeautifulSoup
+from langchain_community.document_loaders import WebBaseLoader
+
 from application.parser.remote.base import BaseRemote
 from application.parser.schema.base import Document
-from langchain_community.document_loaders import WebBaseLoader
+
+logger = logging.getLogger(__name__)
+
 
 class CrawlerLoader(BaseRemote):
     def __init__(self, limit=10):
@@ -36,22 +41,17 @@ class CrawlerLoader(BaseRemote):
                 docs = loader.load()
                 # Convert the loaded documents to your Document schema
                 for doc in docs:
-                    loaded_content.append(
-                        Document(
-                            doc.page_content,
-                            extra_info=doc.metadata
-                        )
-                    )
+                    loaded_content.append(Document(doc.page_content, extra_info=doc.metadata))
             except Exception as e:
-                logging.error(f"Error processing URL {current_url}: {e}", exc_info=True)
+                logger.exception(f"Error processing URL {current_url}: {e}")
                 continue
 
             # Parse the HTML content to extract all links
-            soup = BeautifulSoup(response.text, 'html.parser')
+            soup = BeautifulSoup(response.text, "html.parser")
             all_links = [
-                urljoin(current_url, a['href'])
-                for a in soup.find_all('a', href=True)
-                if base_url in urljoin(current_url, a['href'])
+                urljoin(current_url, a["href"])
+                for a in soup.find_all("a", href=True)
+                if base_url in urljoin(current_url, a["href"])
             ]
 
             # Add new links to the list of URLs to visit if they haven't been visited yet

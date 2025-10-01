@@ -1,13 +1,17 @@
 import logging
+from urllib.parse import urlparse
+
+from langchain_community.document_loaders import WebBaseLoader
+from requests.exceptions import RequestException
+
 from application.parser.remote.base import BaseRemote
 from application.parser.schema.base import Document
-from langchain_community.document_loaders import WebBaseLoader
-from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 headers = {
     "User-Agent": "Mozilla/5.0",
-    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*"
-    ";q=0.8",
+    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
     "Accept-Language": "en-US,en;q=0.5",
     "Referer": "https://www.google.com/",
     "DNT": "1",
@@ -39,7 +43,7 @@ class WebLoader(BaseRemote):
                             extra_info=doc.metadata,
                         )
                     )
-            except Exception as e:
-                logging.error(f"Error processing URL {url}: {e}", exc_info=True)
+            except (RequestException, ValueError):
+                logger.exception("Error processing URL %s", url)
                 continue
         return documents
