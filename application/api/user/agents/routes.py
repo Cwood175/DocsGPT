@@ -5,9 +5,12 @@ import json
 import uuid
 
 from bson.dbref import DBRef
+from bson.errors import InvalidDocument, InvalidId
 from bson.objectid import ObjectId
 from flask import current_app, jsonify, make_response, request
-from flask_restx import fields, Namespace, Resource
+from flask_restx import Namespace, Resource, fields
+from pymongo.errors import PyMongoError
+from werkzeug.exceptions import BadRequest
 
 from application.api import api
 from application.api.user.base import (
@@ -25,7 +28,6 @@ from application.utils import (
     validate_required_fields,
 )
 
-
 agents_ns = Namespace("agents", description="Agent management operations", path="/api")
 
 
@@ -38,22 +40,17 @@ class GetAgent(Resource):
         if not (agent_id := request.args.get("id")):
             return {"success": False, "message": "ID required"}, 400
         try:
-            agent = agents_collection.find_one(
-                {"_id": ObjectId(agent_id), "user": decoded_token["sub"]}
-            )
+            agent = agents_collection.find_one({"_id": ObjectId(agent_id), "user": decoded_token["sub"]})
             if not agent:
                 return {"status": "Not found"}, 404
             data = {
                 "id": str(agent["_id"]),
                 "name": agent["name"],
                 "description": agent.get("description", ""),
-                "image": (
-                    generate_image_url(agent["image"]) if agent.get("image") else ""
-                ),
+                "image": (generate_image_url(agent["image"]) if agent.get("image") else ""),
                 "source": (
                     str(source_doc["_id"])
-                    if isinstance(agent.get("source"), DBRef)
-                    and (source_doc := db.dereference(agent.get("source")))
+                    if isinstance(agent.get("source"), DBRef) and (source_doc := db.dereference(agent.get("source")))
                     else ""
                 ),
                 "sources": [
@@ -63,8 +60,7 @@ class GetAgent(Resource):
                         else source_ref
                     )
                     for source_ref in agent.get("sources", [])
-                    if (isinstance(source_ref, DBRef) and db.dereference(source_ref))
-                    or source_ref == "default"
+                    if (isinstance(source_ref, DBRef) and db.dereference(source_ref)) or source_ref == "default"
                 ],
                 "chunks": agent["chunks"],
                 "retriever": agent.get("retriever", ""),
@@ -77,19 +73,15 @@ class GetAgent(Resource):
                 "created_at": agent.get("createdAt", ""),
                 "updated_at": agent.get("updatedAt", ""),
                 "last_used_at": agent.get("lastUsedAt", ""),
-                "key": (
-                    f"{agent['key'][:4]}...{agent['key'][-4:]}"
-                    if "key" in agent
-                    else ""
-                ),
+                "key": (f"{agent['key'][:4]}...{agent['key'][-4:]}" if "key" in agent else ""),
                 "pinned": agent.get("pinned", False),
                 "shared": agent.get("shared_publicly", False),
                 "shared_metadata": agent.get("shared_metadata", {}),
                 "shared_token": agent.get("shared_token", ""),
             }
             return make_response(jsonify(data), 200)
-        except Exception as e:
-            current_app.logger.error(f"Agent fetch error: {e}", exc_info=True)
+        except (InvalidId, KeyError, PyMongoError, TypeError, ValueError) as e:
+            current_app.logger.exception("Agent fetch error: %s", e)
             return {"success": False}, 400
 
 
@@ -110,30 +102,17 @@ class GetAgents(Resource):
                     "id": str(agent["_id"]),
                     "name": agent["name"],
                     "description": agent.get("description", ""),
-                    "image": (
-                        generate_image_url(agent["image"]) if agent.get("image") else ""
-                    ),
+                    "image": (generate_image_url(agent["image"]) if agent.get("image") else ""),
                     "source": (
                         str(source_doc["_id"])
                         if isinstance(agent.get("source"), DBRef)
                         and (source_doc := db.dereference(agent.get("source")))
-                        else (
-                            agent.get("source", "")
-                            if agent.get("source") == "default"
-                            else ""
-                        )
+                        else (agent.get("source", "") if agent.get("source") == "default" else "")
                     ),
                     "sources": [
-                        (
-                            source_ref
-                            if source_ref == "default"
-                            else str(db.dereference(source_ref)["_id"])
-                        )
+                        (source_ref if source_ref == "default" else str(db.dereference(source_ref)["_id"]))
                         for source_ref in agent.get("sources", [])
-                        if source_ref == "default"
-                        or (
-                            isinstance(source_ref, DBRef) and db.dereference(source_ref)
-                        )
+                        if source_ref == "default" or (isinstance(source_ref, DBRef) and db.dereference(source_ref))
                     ],
                     "chunks": agent["chunks"],
                     "retriever": agent.get("retriever", ""),
@@ -146,11 +125,7 @@ class GetAgents(Resource):
                     "created_at": agent.get("createdAt", ""),
                     "updated_at": agent.get("updatedAt", ""),
                     "last_used_at": agent.get("lastUsedAt", ""),
-                    "key": (
-                        f"{agent['key'][:4]}...{agent['key'][-4:]}"
-                        if "key" in agent
-                        else ""
-                    ),
+                    "key": (f"{agent['key'][:4]}...{agent['key'][-4:]}" if "key" in agent else ""),
                     "pinned": str(agent["_id"]) in pinned_ids,
                     "shared": agent.get("shared_publicly", False),
                     "shared_metadata": agent.get("shared_metadata", {}),
@@ -159,8 +134,8 @@ class GetAgents(Resource):
                 for agent in agents
                 if "source" in agent or "retriever" in agent
             ]
-        except Exception as err:
-            current_app.logger.error(f"Error retrieving agents: {err}", exc_info=True)
+        except (KeyError, PyMongoError, TypeError, ValueError) as err:
+            current_app.logger.exception("Error retrieving agents: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify(list_agents), 200)
 
@@ -171,15 +146,9 @@ class CreateAgent(Resource):
         "CreateAgentModel",
         {
             "name": fields.String(required=True, description="Name of the agent"),
-            "description": fields.String(
-                required=True, description="Description of the agent"
-            ),
-            "image": fields.Raw(
-                required=False, description="Image file upload", type="file"
-            ),
-            "source": fields.String(
-                required=False, description="Source ID (legacy single source)"
-            ),
+            "description": fields.String(required=True, description="Description of the agent"),
+            "image": fields.Raw(required=False, description="Image file upload", type="file"),
+            "source": fields.String(required=False, description="Source ID (legacy single source)"),
             "sources": fields.List(
                 fields.String,
                 required=False,
@@ -188,13 +157,9 @@ class CreateAgent(Resource):
             "chunks": fields.Integer(required=True, description="Chunks count"),
             "retriever": fields.String(required=True, description="Retriever ID"),
             "prompt_id": fields.String(required=True, description="Prompt ID"),
-            "tools": fields.List(
-                fields.String, required=False, description="List of tool identifiers"
-            ),
+            "tools": fields.List(fields.String, required=False, description="List of tool identifiers"),
             "agent_type": fields.String(required=True, description="Type of the agent"),
-            "status": fields.String(
-                required=True, description="Status of the agent (draft or published)"
-            ),
+            "status": fields.String(required=True, description="Status of the agent (draft or published)"),
             "json_schema": fields.Raw(
                 required=False,
                 description="JSON schema for enforcing structured output format",
@@ -258,11 +223,9 @@ class CreateAgent(Resource):
                         ),
                         400,
                     )
-            except Exception as e:
+            except (TypeError, ValueError) as e:
                 return make_response(
-                    jsonify(
-                        {"success": False, "message": f"Invalid JSON schema: {str(e)}"}
-                    ),
+                    jsonify({"success": False, "message": f"Invalid JSON schema: {e!s}"}),
                     400,
                 )
         if data.get("status") not in ["draft", "published"]:
@@ -308,9 +271,7 @@ class CreateAgent(Resource):
             return invalid_fields
         image_url, error = handle_image_upload(request, "", user, storage)
         if error:
-            return make_response(
-                jsonify({"success": False, "message": "Image upload failed"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Image upload failed"}), 400)
         try:
             key = str(uuid.uuid4()) if data.get("status") == "published" else ""
 
@@ -344,23 +305,19 @@ class CreateAgent(Resource):
                 "agent_type": data.get("agent_type", ""),
                 "status": data.get("status"),
                 "json_schema": data.get("json_schema"),
-                "createdAt": datetime.datetime.now(datetime.timezone.utc),
-                "updatedAt": datetime.datetime.now(datetime.timezone.utc),
+                "createdAt": datetime.datetime.now(datetime.UTC),
+                "updatedAt": datetime.datetime.now(datetime.UTC),
                 "lastUsedAt": None,
                 "key": key,
             }
             if new_agent["chunks"] == "":
                 new_agent["chunks"] = "2"
-            if (
-                new_agent["source"] == ""
-                and new_agent["retriever"] == ""
-                and not new_agent["sources"]
-            ):
+            if new_agent["source"] == "" and new_agent["retriever"] == "" and not new_agent["sources"]:
                 new_agent["retriever"] = "classic"
             resp = agents_collection.insert_one(new_agent)
             new_id = str(resp.inserted_id)
-        except Exception as err:
-            current_app.logger.error(f"Error creating agent: {err}", exc_info=True)
+        except (InvalidDocument, InvalidId, PyMongoError, TypeError, ValueError) as err:
+            current_app.logger.exception("Error creating agent: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"id": new_id, "key": key}), 201)
 
@@ -371,15 +328,9 @@ class UpdateAgent(Resource):
         "UpdateAgentModel",
         {
             "name": fields.String(required=True, description="New name of the agent"),
-            "description": fields.String(
-                required=True, description="New description of the agent"
-            ),
-            "image": fields.String(
-                required=False, description="New image URL or identifier"
-            ),
-            "source": fields.String(
-                required=False, description="Source ID (legacy single source)"
-            ),
+            "description": fields.String(required=True, description="New description of the agent"),
+            "image": fields.String(required=False, description="New image URL or identifier"),
+            "source": fields.String(required=False, description="Source ID (legacy single source)"),
             "sources": fields.List(
                 fields.String,
                 required=False,
@@ -388,13 +339,9 @@ class UpdateAgent(Resource):
             "chunks": fields.Integer(required=True, description="Chunks count"),
             "retriever": fields.String(required=True, description="Retriever ID"),
             "prompt_id": fields.String(required=True, description="Prompt ID"),
-            "tools": fields.List(
-                fields.String, required=False, description="List of tool identifiers"
-            ),
+            "tools": fields.List(fields.String, required=False, description="List of tool identifiers"),
             "agent_type": fields.String(required=True, description="Type of the agent"),
-            "status": fields.String(
-                required=True, description="Status of the agent (draft or published)"
-            ),
+            "status": fields.String(required=True, description="Status of the agent (draft or published)"),
             "json_schema": fields.Raw(
                 required=False,
                 description="JSON schema for enforcing structured output format",
@@ -406,15 +353,11 @@ class UpdateAgent(Resource):
     @api.doc(description="Update an existing agent")
     def put(self, agent_id):
         if not (decoded_token := request.decoded_token):
-            return make_response(
-                jsonify({"success": False, "message": "Unauthorized"}), 401
-            )
+            return make_response(jsonify({"success": False, "message": "Unauthorized"}), 401)
         user = decoded_token.get("sub")
 
         if not ObjectId.is_valid(agent_id):
-            return make_response(
-                jsonify({"success": False, "message": "Invalid agent ID format"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Invalid agent ID format"}), 400)
         oid = ObjectId(agent_id)
 
         try:
@@ -424,7 +367,7 @@ class UpdateAgent(Resource):
                 data = request.form.to_dict()
                 json_fields = ["tools", "sources", "json_schema"]
                 for field in json_fields:
-                    if field in data and data[field]:
+                    if data.get(field):
                         try:
                             data[field] = json.loads(data[field])
                         except json.JSONDecodeError:
@@ -437,37 +380,25 @@ class UpdateAgent(Resource):
                                 ),
                                 400,
                             )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error parsing request data: {err}", exc_info=True
-            )
-            return make_response(
-                jsonify({"success": False, "message": "Invalid request data"}), 400
-            )
+        except BadRequest as err:
+            current_app.logger.exception("Error parsing request data: %s", err)
+            return make_response(jsonify({"success": False, "message": "Invalid request data"}), 400)
         try:
             existing_agent = agents_collection.find_one({"_id": oid, "user": user})
-        except Exception as err:
-            current_app.logger.error(
-                f"Error finding agent {agent_id}: {err}", exc_info=True
-            )
+        except PyMongoError as err:
+            current_app.logger.exception("Error finding agent %s: %s", agent_id, err)
             return make_response(
                 jsonify({"success": False, "message": "Database error finding agent"}),
                 500,
             )
         if not existing_agent:
             return make_response(
-                jsonify(
-                    {"success": False, "message": "Agent not found or not authorized"}
-                ),
+                jsonify({"success": False, "message": "Agent not found or not authorized"}),
                 404,
             )
-        image_url, error = handle_image_upload(
-            request, existing_agent.get("image", ""), user, storage
-        )
+        image_url, error = handle_image_upload(request, existing_agent.get("image", ""), user, storage)
         if error:
-            current_app.logger.error(
-                f"Image upload error for agent {agent_id}: {error}"
-            )
+            current_app.logger.error(f"Image upload error for agent {agent_id}: {error}")
             return make_response(
                 jsonify({"success": False, "message": f"Image upload failed: {error}"}),
                 400,
@@ -642,15 +573,11 @@ class UpdateAgent(Resource):
 
             missing_published_fields = []
             for req_field, field_label in required_published_fields.items():
-                final_value = update_fields.get(
-                    req_field, existing_agent.get(req_field)
-                )
+                final_value = update_fields.get(req_field, existing_agent.get(req_field))
                 if not final_value:
                     missing_published_fields.append(field_label)
             source_val = update_fields.get("source", existing_agent.get("source"))
-            sources_val = update_fields.get(
-                "sources", existing_agent.get("sources", [])
-            )
+            sources_val = update_fields.get("sources", existing_agent.get("sources", []))
 
             has_valid_source = (
                 isinstance(source_val, DBRef)
@@ -673,12 +600,10 @@ class UpdateAgent(Resource):
             if not existing_agent.get("key"):
                 newly_generated_key = str(uuid.uuid4())
                 update_fields["key"] = newly_generated_key
-        update_fields["updatedAt"] = datetime.datetime.now(datetime.timezone.utc)
+        update_fields["updatedAt"] = datetime.datetime.now(datetime.UTC)
 
         try:
-            result = agents_collection.update_one(
-                {"_id": oid, "user": user}, {"$set": update_fields}
-            )
+            result = agents_collection.update_one({"_id": oid, "user": user}, {"$set": update_fields})
 
             if result.matched_count == 0:
                 return make_response(
@@ -701,10 +626,8 @@ class UpdateAgent(Resource):
                     ),
                     200,
                 )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error updating agent {agent_id}: {err}", exc_info=True
-            )
+        except (InvalidDocument, PyMongoError) as err:
+            current_app.logger.exception("Error updating agent %s: %s", agent_id, err)
             return make_response(
                 jsonify({"success": False, "message": "Database error during update"}),
                 500,
@@ -729,20 +652,14 @@ class DeleteAgent(Resource):
         user = decoded_token.get("sub")
         agent_id = request.args.get("id")
         if not agent_id:
-            return make_response(
-                jsonify({"success": False, "message": "ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "ID is required"}), 400)
         try:
-            deleted_agent = agents_collection.find_one_and_delete(
-                {"_id": ObjectId(agent_id), "user": user}
-            )
+            deleted_agent = agents_collection.find_one_and_delete({"_id": ObjectId(agent_id), "user": user})
             if not deleted_agent:
-                return make_response(
-                    jsonify({"success": False, "message": "Agent not found"}), 404
-                )
+                return make_response(jsonify({"success": False, "message": "Agent not found"}), 404)
             deleted_id = str(deleted_agent["_id"])
-        except Exception as err:
-            current_app.logger.error(f"Error deleting agent: {err}", exc_info=True)
+        except (InvalidId, PyMongoError) as err:
+            current_app.logger.exception("Error deleting agent: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"id": deleted_id}), 200)
 
@@ -764,17 +681,13 @@ class PinnedAgents(Resource):
                 return make_response(jsonify([]), 200)
             pinned_object_ids = [ObjectId(agent_id) for agent_id in pinned_ids]
 
-            pinned_agents_cursor = agents_collection.find(
-                {"_id": {"$in": pinned_object_ids}}
-            )
+            pinned_agents_cursor = agents_collection.find({"_id": {"$in": pinned_object_ids}})
             pinned_agents = list(pinned_agents_cursor)
             existing_ids = {str(agent["_id"]) for agent in pinned_agents}
 
             # Clean up any stale pinned IDs
 
-            stale_ids = [
-                agent_id for agent_id in pinned_ids if agent_id not in existing_ids
-            ]
+            stale_ids = [agent_id for agent_id in pinned_ids if agent_id not in existing_ids]
             if stale_ids:
                 users_collection.update_one(
                     {"user_id": user_id},
@@ -785,15 +698,10 @@ class PinnedAgents(Resource):
                     "id": str(agent["_id"]),
                     "name": agent.get("name", ""),
                     "description": agent.get("description", ""),
-                    "image": (
-                        generate_image_url(agent["image"]) if agent.get("image") else ""
-                    ),
+                    "image": (generate_image_url(agent["image"]) if agent.get("image") else ""),
                     "source": (
-                        str(db.dereference(agent["source"])["_id"])
-                        if "source" in agent
-                        and agent["source"]
-                        and isinstance(agent["source"], DBRef)
-                        and db.dereference(agent["source"]) is not None
+                        str(db.dereference(agent.get("source"))["_id"])
+                        if isinstance(agent.get("source"), DBRef) and db.dereference(agent.get("source")) is not None
                         else ""
                     ),
                     "chunks": agent.get("chunks", ""),
@@ -806,18 +714,14 @@ class PinnedAgents(Resource):
                     "created_at": agent.get("createdAt", ""),
                     "updated_at": agent.get("updatedAt", ""),
                     "last_used_at": agent.get("lastUsedAt", ""),
-                    "key": (
-                        f"{agent['key'][:4]}...{agent['key'][-4:]}"
-                        if "key" in agent
-                        else ""
-                    ),
+                    "key": (f"{agent['key'][:4]}...{agent['key'][-4:]}" if "key" in agent else ""),
                     "pinned": True,
                 }
                 for agent in pinned_agents
                 if "source" in agent or "retriever" in agent
             ]
-        except Exception as err:
-            current_app.logger.error(f"Error retrieving pinned agents: {err}")
+        except (InvalidId, KeyError, PyMongoError, TypeError, ValueError) as err:
+            current_app.logger.exception("Error retrieving pinned agents: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify(list_pinned_agents), 200)
 
@@ -838,8 +742,8 @@ class GetTemplateAgents(Resource):
                 for agent in template_agents
             ]
             return make_response(jsonify(template_agents), 200)
-        except Exception as e:
-            current_app.logger.error(f"Template agents fetch error: {e}", exc_info=True)
+        except (KeyError, PyMongoError, TypeError, ValueError) as e:
+            current_app.logger.exception("Template agents fetch error: %s", e)
             return make_response(jsonify({"success": False}), 400)
 
 
@@ -851,14 +755,10 @@ class AdoptAgent(Resource):
             return make_response(jsonify({"success": False}), 401)
 
         if not (agent_id := request.args.get("id")):
-            return make_response(
-                jsonify({"success": False, "message": "ID required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "ID required"}), 400)
 
         try:
-            agent = agents_collection.find_one(
-                {"_id": ObjectId(agent_id), "user": "system"}
-            )
+            agent = agents_collection.find_one({"_id": ObjectId(agent_id), "user": "system"})
             if not agent:
                 return make_response(jsonify({"status": "Not found"}), 404)
 
@@ -866,23 +766,26 @@ class AdoptAgent(Resource):
             new_agent.pop("_id", None)
             new_agent["user"] = decoded_token["sub"]
             new_agent["status"] = "published"
-            new_agent["lastUsedAt"] = datetime.datetime.now(datetime.timezone.utc)
+            new_agent["lastUsedAt"] = datetime.datetime.now(datetime.UTC)
             new_agent["key"] = str(uuid.uuid4())
             insert_result = agents_collection.insert_one(new_agent)
 
             response_agent = new_agent.copy()
             response_agent.pop("_id", None)
             response_agent["id"] = str(insert_result.inserted_id)
-            response_agent["tool_details"] = resolve_tool_details(
-                response_agent.get("tools", [])
-            )
+            response_agent["tool_details"] = resolve_tool_details(response_agent.get("tools", []))
             if isinstance(response_agent.get("source"), DBRef):
                 response_agent["source"] = str(response_agent["source"].id)
-            return make_response(
-                jsonify({"success": True, "agent": response_agent}), 200
-            )
-        except Exception as e:
-            current_app.logger.error(f"Agent adopt error: {e}", exc_info=True)
+            return make_response(jsonify({"success": True, "agent": response_agent}), 200)
+        except (
+            InvalidDocument,
+            InvalidId,
+            KeyError,
+            PyMongoError,
+            TypeError,
+            ValueError,
+        ) as e:
+            current_app.logger.exception("Agent adopt error: %s", e)
             return make_response(jsonify({"success": False}), 400)
 
 
@@ -897,15 +800,11 @@ class PinAgent(Resource):
         agent_id = request.args.get("id")
 
         if not agent_id:
-            return make_response(
-                jsonify({"success": False, "message": "ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "ID is required"}), 400)
         try:
             agent = agents_collection.find_one({"_id": ObjectId(agent_id)})
             if not agent:
-                return make_response(
-                    jsonify({"success": False, "message": "Agent not found"}), 404
-                )
+                return make_response(jsonify({"success": False, "message": "Agent not found"}), 404)
             user_doc = ensure_user_doc(user_id)
             pinned_list = user_doc.get("agent_preferences", {}).get("pinned", [])
 
@@ -921,11 +820,9 @@ class PinAgent(Resource):
                     {"$addToSet": {"agent_preferences.pinned": agent_id}},
                 )
                 action = "pinned"
-        except Exception as err:
-            current_app.logger.error(f"Error pinning/unpinning agent: {err}")
-            return make_response(
-                jsonify({"success": False, "message": "Server error"}), 500
-            )
+        except (InvalidId, PyMongoError) as err:
+            current_app.logger.exception("Error pinning/unpinning agent: %s", err)
+            return make_response(jsonify({"success": False, "message": "Server error"}), 500)
         return make_response(jsonify({"success": True, "action": action}), 200)
 
 
@@ -943,13 +840,9 @@ class RemoveSharedAgent(Resource):
         agent_id = request.args.get("id")
 
         if not agent_id:
-            return make_response(
-                jsonify({"success": False, "message": "ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "ID is required"}), 400)
         try:
-            agent = agents_collection.find_one(
-                {"_id": ObjectId(agent_id), "shared_publicly": True}
-            )
+            agent = agents_collection.find_one({"_id": ObjectId(agent_id), "shared_publicly": True})
             if not agent:
                 return make_response(
                     jsonify({"success": False, "message": "Shared agent not found"}),
@@ -967,8 +860,6 @@ class RemoveSharedAgent(Resource):
             )
 
             return make_response(jsonify({"success": True, "action": "removed"}), 200)
-        except Exception as err:
-            current_app.logger.error(f"Error removing shared agent: {err}")
-            return make_response(
-                jsonify({"success": False, "message": "Server error"}), 500
-            )
+        except (InvalidId, PyMongoError) as err:
+            current_app.logger.exception("Error removing shared agent: %s", err)
+            return make_response(jsonify({"success": False, "message": "Server error"}), 500)

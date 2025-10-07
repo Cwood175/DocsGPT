@@ -4,9 +4,11 @@ import json
 import math
 import os
 
+from bson.errors import InvalidId
 from bson.objectid import ObjectId
 from flask import current_app, jsonify, make_response, redirect, request
-from flask_restx import fields, Namespace, Resource
+from flask_restx import Namespace, Resource, fields
+from pymongo.errors import PyMongoError
 from werkzeug.utils import secure_filename
 
 from application.api import api
@@ -16,10 +18,7 @@ from application.storage.storage_creator import StorageCreator
 from application.utils import check_required_fields
 from application.vectorstore.vector_creator import VectorCreator
 
-
-sources_ns = Namespace(
-    "sources", description="Source document management operations", path="/api"
-)
+sources_ns = Namespace("sources", description="Source document management operations", path="/api")
 
 
 @sources_ns.route("/sources")
@@ -54,13 +53,11 @@ class CombinedJson(Resource):
                         "retriever": index.get("retriever", "classic"),
                         "syncFrequency": index.get("sync_frequency", ""),
                         "is_nested": bool(index.get("directory_structure")),
-                        "type": index.get(
-                            "type", "file"
-                        ),  # Add type field with default "file"
+                        "type": index.get("type", "file"),  # Add type field with default "file"
                     }
                 )
-        except Exception as err:
-            current_app.logger.error(f"Error retrieving sources: {err}", exc_info=True)
+        except PyMongoError as err:
+            current_app.logger.exception(f"Error retrieving sources: {err!s}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify(data), 200)
 
@@ -79,9 +76,7 @@ class PaginatedSources(Resource):
         rows_per_page = int(request.args.get("rows", 10))  # Default to 10
         # add .strip() to remove leading and trailing whitespaces
 
-        search_term = request.args.get(
-            "search", ""
-        ).strip()  # add search for filter documents
+        search_term = request.args.get("search", "").strip()  # add search for filter documents
 
         # Prepare query for filtering
 
@@ -93,19 +88,12 @@ class PaginatedSources(Resource):
             }
         total_documents = sources_collection.count_documents(query)
         total_pages = max(1, math.ceil(total_documents / rows_per_page))
-        page = min(
-            max(1, page), total_pages
-        )  # add this to make sure page inbound is within the range
+        page = min(max(1, page), total_pages)  # add this to make sure page inbound is within the range
         sort_order = 1 if sort_order == "asc" else -1
         skip = (page - 1) * rows_per_page
 
         try:
-            documents = (
-                sources_collection.find(query)
-                .sort(sort_field, sort_order)
-                .skip(skip)
-                .limit(rows_per_page)
-            )
+            documents = sources_collection.find(query).sort(sort_field, sort_order).skip(skip).limit(rows_per_page)
 
             paginated_docs = []
             for doc in documents:
@@ -129,10 +117,8 @@ class PaginatedSources(Resource):
                 "paginated": paginated_docs,
             }
             return make_response(jsonify(response), 200)
-        except Exception as err:
-            current_app.logger.error(
-                f"Error retrieving paginated sources: {err}", exc_info=True
-            )
+        except PyMongoError as err:
+            current_app.logger.exception(f"Error retrieving paginated sources: {err!s}")
             return make_response(jsonify({"success": False}), 400)
 
 
@@ -155,8 +141,8 @@ class CheckDocs(Resource):
             vectorstore = "vectors/" + secure_filename(data["docs"])
             if os.path.exists(vectorstore) or data["docs"] == "default":
                 return {"status": "exists"}, 200
-        except Exception as err:
-            current_app.logger.error(f"Error checking document: {err}", exc_info=True)
+        except (OSError, TypeError) as err:
+            current_app.logger.exception(f"Error checking document: {err!s}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"status": "not found"}), 404)
 
@@ -170,15 +156,13 @@ class DeleteByIds(Resource):
     def get(self):
         ids = request.args.get("path")
         if not ids:
-            return make_response(
-                jsonify({"success": False, "message": "Missing required fields"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Missing required fields"}), 400)
         try:
             result = sources_collection.delete_index(ids=ids)
             if result:
                 return make_response(jsonify({"success": True}), 200)
-        except Exception as err:
-            current_app.logger.error(f"Error deleting indexes: {err}", exc_info=True)
+        except PyMongoError as err:
+            current_app.logger.exception(f"Error deleting indexes: {err!s}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": False}), 400)
 
@@ -195,12 +179,8 @@ class DeleteOldIndexes(Resource):
             return make_response(jsonify({"success": False}), 401)
         source_id = request.args.get("source_id")
         if not source_id:
-            return make_response(
-                jsonify({"success": False, "message": "Missing required fields"}), 400
-            )
-        doc = sources_collection.find_one(
-            {"_id": ObjectId(source_id), "user": decoded_token.get("sub")}
-        )
+            return make_response(jsonify({"success": False, "message": "Missing required fields"}), 400)
+        doc = sources_collection.find_one({"_id": ObjectId(source_id), "user": decoded_token.get("sub")})
         if not doc:
             return make_response(jsonify({"status": "not found"}), 404)
         storage = StorageCreator.get_storage()
@@ -209,18 +189,15 @@ class DeleteOldIndexes(Resource):
             # Delete vector index
 
             if settings.VECTOR_STORE == "faiss":
-                index_path = f"indexes/{str(doc['_id'])}"
+                index_path = f"indexes/{doc['_id']!s}"
                 if storage.file_exists(f"{index_path}/index.faiss"):
                     storage.delete_file(f"{index_path}/index.faiss")
                 if storage.file_exists(f"{index_path}/index.pkl"):
                     storage.delete_file(f"{index_path}/index.pkl")
             else:
-                vectorstore = VectorCreator.create_vectorstore(
-                    settings.VECTOR_STORE, source_id=str(doc["_id"])
-                )
+                vectorstore = VectorCreator.create_vectorstore(settings.VECTOR_STORE, source_id=str(doc["_id"]))
                 vectorstore.delete_index()
-            if "file_path" in doc and doc["file_path"]:
-                file_path = doc["file_path"]
+            if file_path := doc.get("file_path"):
                 if storage.is_directory(file_path):
                     files = storage.list_files(file_path)
                     for f in files:
@@ -229,10 +206,8 @@ class DeleteOldIndexes(Resource):
                     storage.delete_file(file_path)
         except FileNotFoundError:
             pass
-        except Exception as err:
-            current_app.logger.error(
-                f"Error deleting files and indexes: {err}", exc_info=True
-            )
+        except (OSError, RuntimeError, ValueError) as err:
+            current_app.logger.exception(f"Error deleting files and indexes: {err!s}")
             return make_response(jsonify({"success": False}), 400)
         sources_collection.delete_one({"_id": ObjectId(source_id)})
         return make_response(jsonify({"success": True}), 200)
@@ -240,9 +215,7 @@ class DeleteOldIndexes(Resource):
 
 @sources_ns.route("/combine")
 class RedirectToSources(Resource):
-    @api.doc(
-        description="Redirects /api/combine to /api/sources for backward compatibility"
-    )
+    @api.doc(description="Redirects /api/combine to /api/sources for backward compatibility")
     def get(self):
         return redirect("/api/sources", code=301)
 
@@ -276,9 +249,7 @@ class ManageSync(Resource):
         sync_frequency = data["sync_frequency"]
 
         if sync_frequency not in ["never", "daily", "weekly", "monthly"]:
-            return make_response(
-                jsonify({"success": False, "message": "Invalid frequency"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Invalid frequency"}), 400)
         update_data = {"$set": {"sync_frequency": sync_frequency}}
         try:
             sources_collection.update_one(
@@ -288,10 +259,8 @@ class ManageSync(Resource):
                 },
                 update_data,
             )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error updating sync frequency: {err}", exc_info=True
-            )
+        except (InvalidId, PyMongoError, TypeError) as err:
+            current_app.logger.exception(f"Error updating sync frequency: {err!s}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -315,36 +284,30 @@ class DirectoryStructure(Resource):
             return make_response(jsonify({"error": "Invalid document ID"}), 400)
         try:
             doc = sources_collection.find_one({"_id": ObjectId(doc_id), "user": user})
-            if not doc:
-                return make_response(
-                    jsonify({"error": "Document not found or access denied"}), 404
-                )
-            directory_structure = doc.get("directory_structure", {})
-            base_path = doc.get("file_path", "")
-
-            provider = None
-            remote_data = doc.get("remote_data")
-            try:
-                if isinstance(remote_data, str) and remote_data:
-                    remote_data_obj = json.loads(remote_data)
-                    provider = remote_data_obj.get("provider")
-            except Exception as e:
-                current_app.logger.warning(
-                    f"Failed to parse remote_data for doc {doc_id}: {e}"
-                )
-            return make_response(
-                jsonify(
-                    {
-                        "success": True,
-                        "directory_structure": directory_structure,
-                        "base_path": base_path,
-                        "provider": provider,
-                    }
-                ),
-                200,
-            )
-        except Exception as e:
-            current_app.logger.error(
-                f"Error retrieving directory structure: {e}", exc_info=True
-            )
+        except PyMongoError as e:
+            current_app.logger.exception(f"Error retrieving directory structure: {e!s}")
             return make_response(jsonify({"success": False, "error": str(e)}), 500)
+        if not doc:
+            return make_response(jsonify({"error": "Document not found or access denied"}), 404)
+        directory_structure = doc.get("directory_structure", {})
+        base_path = doc.get("file_path", "")
+
+        provider = None
+        remote_data = doc.get("remote_data")
+        try:
+            if isinstance(remote_data, str) and remote_data:
+                remote_data_obj = json.loads(remote_data)
+                provider = remote_data_obj.get("provider")
+        except (AttributeError, json.JSONDecodeError) as e:
+            current_app.logger.warning(f"Failed to parse remote_data for doc {doc_id}: {e!s}")
+        return make_response(
+            jsonify(
+                {
+                    "success": True,
+                    "directory_structure": directory_structure,
+                    "base_path": base_path,
+                    "provider": provider,
+                }
+            ),
+            200,
+        )
