@@ -4,9 +4,8 @@ import logging
 import aiohttp
 import discord
 from discord.ext import commands
-import dotenv
-
-dotenv.load_dotenv()
+from dotenv import load_dotenv
+load_dotenv()
 
 # Enable logging
 logging.basicConfig(level=logging.INFO)
@@ -55,7 +54,7 @@ def escape_markdown(text):
 
 def split_string(input_str):
     """Splits the input string to detect bot mentions."""
-    pattern = r'^<@!?{0}>\s*'.format(bot.user.id)
+    pattern = fr'^<@!?{bot.user.id}>\s*'
     match = re.match(pattern, input_str)
     if match:
         content = input_str[match.end():].strip()

@@ -90,7 +90,7 @@ def memory_tool(monkeypatch) -> MemoryTool:
 
                 for key, doc in self.docs.items():
                     if doc.get("user_id") == user_id and doc.get("tool_id") == tool_id:
-                        doc_path = doc.get("path", "")
+                        doc_path = doc["path"] if "path" in doc else ""
                         if doc_path.startswith(pattern):
                             results.append(doc)
             else:
@@ -497,7 +497,7 @@ def test_get_actions_metadata(memory_tool: MemoryTool) -> None:
     metadata = memory_tool.get_actions_metadata()
 
     # Check that all expected actions are defined
-    action_names = [action["name"] for action in metadata]
+    action_names = [action["name"] for action in metadata.values()]
     assert "view" in action_names
     assert "create" in action_names
     assert "str_replace" in action_names

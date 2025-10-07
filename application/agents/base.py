@@ -1,7 +1,7 @@
 import logging
 import uuid
 from abc import ABC, abstractmethod
-from typing import Dict, Generator, List, Optional
+from typing import Optional, Generator, List, Dict
 
 from bson.objectid import ObjectId
 
@@ -58,16 +58,16 @@ class BaseAgent(ABC):
     @log_activity()
     def gen(
         self, query: str, retriever: BaseRetriever, log_context: LogContext = None
-    ) -> Generator[Dict, None, None]:
+    ) -> Generator[dict, None, None]:
         yield from self._gen_inner(query, retriever, log_context)
 
     @abstractmethod
     def _gen_inner(
         self, query: str, retriever: BaseRetriever, log_context: LogContext
-    ) -> Generator[Dict, None, None]:
+    ) -> Generator[dict, None, None]:
         pass
 
-    def _get_tools(self, api_key: str = None) -> Dict[str, Dict]:
+    def _get_tools(self, api_key: str = None) -> dict[str, dict]:
         mongo = MongoDB.get_client()
         db = mongo[settings.MONGO_DB_NAME]
         agents_collection = db["agents"]
@@ -283,10 +283,10 @@ class BaseAgent(ABC):
         messages_combine = [{"role": "system", "content": p_chat_combine}]
 
         for i in self.chat_history:
-            if "prompt" in i and "response" in i:
+            if i.get("prompt") and i.get("response"):
                 messages_combine.append({"role": "user", "content": i["prompt"]})
                 messages_combine.append({"role": "assistant", "content": i["response"]})
-            if "tool_calls" in i:
+            if i.get("tool_calls"):
                 for tool_call in i["tool_calls"]:
                     call_id = tool_call.get("call_id") or str(uuid.uuid4())
 
@@ -326,7 +326,7 @@ class BaseAgent(ABC):
             log_context.stacks.append({"component": "retriever", "data": data})
         return retrieved_data
 
-    def _llm_gen(self, messages: List[Dict], log_context: Optional[LogContext] = None):
+    def _llm_gen(self, messages: list[dict], log_context: Optional[LogContext] = None):
         gen_kwargs = {"model": self.gpt_model, "messages": messages}
 
         if (

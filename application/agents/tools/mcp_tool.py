@@ -182,7 +182,7 @@ class MCPTool(Tool):
         else:
             return StreamableHttpTransport(url=self.server_url, headers=headers)
 
-    def _format_tools(self, tools_response) -> List[Dict]:
+    def _format_tools(self, tools_response) -> list[dict]:
         """Format tools response to match expected format."""
         if hasattr(tools_response, "tools"):
             tools = tools_response.tools
@@ -264,7 +264,7 @@ class MCPTool(Tool):
             print(f"Error occurred while running async operation: {e}")
             raise
 
-    def discover_tools(self) -> List[Dict]:
+    def discover_tools(self) -> list[dict]:
         """
         Discover available tools from the MCP server using FastMCP.
 
@@ -280,7 +280,7 @@ class MCPTool(Tool):
             self.available_tools = tools
             return self.available_tools
         except Exception as e:
-            raise Exception(f"Failed to discover tools from MCP server: {str(e)}")
+            raise RuntimeError(f"Failed to discover tools from MCP server: {str(e)}") from e
 
     def execute_action(self, action_name: str, **kwargs) -> Any:
         """
@@ -294,7 +294,7 @@ class MCPTool(Tool):
             Result from the MCP server
         """
         if not self.server_url:
-            raise Exception("No MCP server configured")
+            raise RuntimeError("No MCP server configured")
         if not self._client:
             self._setup_client()
         cleaned_kwargs = {}
@@ -308,9 +308,9 @@ class MCPTool(Tool):
             )
             return self._format_result(result)
         except Exception as e:
-            raise Exception(f"Failed to execute action '{action_name}': {str(e)}")
+            raise RuntimeError(f"Failed to execute action '{action_name}': {str(e)}") from e
 
-    def _format_result(self, result) -> Dict:
+    def _format_result(self, result) -> dict:
         """Format FastMCP result to match expected format."""
         if hasattr(result, "content"):
             content_list = []
@@ -330,7 +330,7 @@ class MCPTool(Tool):
         else:
             return result
 
-    def test_connection(self) -> Dict:
+    def test_connection(self) -> dict:
         """
         Test the connection to the MCP server and validate functionality.
 
@@ -363,12 +363,13 @@ class MCPTool(Tool):
                 "error_type": type(e).__name__,
             }
 
-    def _test_regular_connection(self) -> Dict:
+    def _test_regular_connection(self) -> dict:
         """Test connection for non-OAuth auth types."""
         try:
             self._run_async_operation("ping")
             ping_success = True
-        except Exception:
+        except Exception as e:
+            logging.debug(f"Ping failed: {e}")
             ping_success = False
         tools = self.discover_tools()
 
@@ -452,7 +453,7 @@ class MCPTool(Tool):
             actions.append(action)
         return actions
 
-    def get_config_requirements(self) -> Dict:
+    def get_config_requirements(self) -> dict:
         """Get configuration requirements for the MCP tool."""
         return {
             "server_url": {
@@ -854,7 +855,7 @@ class MCPOAuthManager:
             logging.error(f"Error handling OAuth callback: {e}")
             return False
 
-    def get_oauth_status(self, task_id: str) -> Dict[str, Any]:
+    def get_oauth_status(self, task_id: str) -> dict[str, Any]:
         """Get current status of OAuth flow using provided task_id."""
         if not task_id:
             return {"status": "not_started", "message": "OAuth flow not started"}

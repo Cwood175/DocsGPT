@@ -1,13 +1,12 @@
 import datetime
 import json
 import logging
-from typing import Any, Dict, Generator, List, Optional
+from typing import Any, Generator, Optional, List, Dict
 
 from flask import Response
 from flask_restx import Namespace
 
 from application.api.answer.services.conversation_service import ConversationService
-
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
 from application.llm.llm_creator import LLMCreator
@@ -45,7 +44,7 @@ class BaseAnswerResource:
         question: str,
         agent: Any,
         retriever: Any,
-        conversation_id: Optional[str],
+        conversation_id: str | None,
         user_api_key: Optional[str],
         decoded_token: Dict[str, Any],
         isNoneDoc: bool = False,
@@ -194,7 +193,7 @@ class BaseAnswerResource:
             data = json.dumps({"type": "end"})
             yield f"data: {data}\n\n"
         except Exception as e:
-            logger.error(f"Error in stream: {str(e)}", exc_info=True)
+            logger.exception(f"Error in stream: {e}")
             data = json.dumps(
                 {
                     "type": "error",

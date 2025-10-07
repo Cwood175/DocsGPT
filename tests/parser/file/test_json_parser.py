@@ -14,9 +14,10 @@ def test_json_init_parser():
 
 def test_json_parser_parses_dict_concat():
     parser = JSONParser()
-    with patch("builtins.open", mock_open(read_data="{}")):
-        with patch("json.load", return_value={"a": 1}):
-            result = parser.parse_file(Path("t.json"))
+    with ExitStack() as stack:
+        stack.enter_context(patch("builtins.open", mock_open(read_data="{}")))
+        stack.enter_context(patch("json.load", return_value={"a": 1}))
+        result = parser.parse_file(Path("t.json"))
     assert result == "{'a': 1}"
 
 

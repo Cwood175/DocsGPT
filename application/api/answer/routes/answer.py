@@ -2,13 +2,12 @@ import logging
 import traceback
 
 from flask import make_response, request
-from flask_restx import fields, Resource
+from flask_restx import Resource
 
 from application.api import api
-
 from application.api.answer.routes.base import answer_ns, BaseAnswerResource
-
 from application.api.answer.services.stream_processor import StreamProcessor
+from flask_restx import fields
 
 logger = logging.getLogger(__name__)
 

@@ -1,8 +1,8 @@
+from pydantic_settings import BaseSettings
+
 import os
 from pathlib import Path
 from typing import Optional
-
-from pydantic_settings import BaseSettings
 
 current_dir = os.path.dirname(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -12,8 +12,8 @@ current_dir = os.path.dirname(
 class Settings(BaseSettings):
     AUTH_TYPE: Optional[str] = None  # simple_jwt, session_jwt, or None
     LLM_PROVIDER: str = "docsgpt"
-    LLM_NAME: Optional[str] = (
-        None  # if LLM_PROVIDER is openai, LLM_NAME can be gpt-4 or gpt-3.5-turbo
+    LLM_NAME: Optional[str] = (  # if LLM_PROVIDER is openai, LLM_NAME can be gpt-4 or gpt-3.5-turbo
+        None
     )
     EMBEDDINGS_NAME: str = "huggingface_sentence-transformers/all-mpnet-base-v2"
     CELERY_BROKER_URL: str = "redis://localhost:6379/0"

@@ -1,8 +1,9 @@
-from typing import Dict, Generator
+import logging
+
 from application.agents.base import BaseAgent
 from application.logging import LogContext
 from application.retriever.base import BaseRetriever
-import logging
+from typing import dict, Generator
 
 logger = logging.getLogger(__name__)
 
