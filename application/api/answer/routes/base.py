@@ -1,13 +1,12 @@
-import datetime
 import json
 import logging
+from datetime import datetime, timezone
 from typing import Any, Dict, Generator, List, Optional
 
 from flask import Response
 from flask_restx import Namespace
 
 from application.api.answer.services.conversation_service import ConversationService
-
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
 from application.llm.llm_creator import LLMCreator
@@ -175,7 +174,7 @@ class BaseAnswerResource:
                 "sources": source_log_docs,
                 "retriever_params": retriever_params,
                 "attachments": attachment_ids,
-                "timestamp": datetime.datetime.now(datetime.timezone.utc),
+                "timestamp": datetime.now(timezone.utc),
             }
             if is_structured:
                 log_data["structured_output"] = True
@@ -243,7 +242,7 @@ class BaseAnswerResource:
                 logger.warning(f"Error parsing stream event: {e}, line: {line}")
                 continue
         if not stream_ended:
-            logger.error("Stream ended unexpectedly without an 'end' event.")
+            logger.error("Stream ended unexpectedly without an 'end' event.", exc_info=True)
             return None, None, None, None, "Stream ended unexpectedly"
 
         result = (

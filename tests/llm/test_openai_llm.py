@@ -1,5 +1,5 @@
-import types
 import pytest
+import types
 
 from application.llm.openai import OpenAILLM
 

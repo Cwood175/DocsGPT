@@ -14,5 +14,5 @@ class LLMHandlerCreator:
     def create_handler(cls, llm_type: str, *args, **kwargs) -> LLMHandler:
         handler_class = cls.handlers.get(llm_type.lower())
         if not handler_class:
-            handler_class = OpenAILLMHandler
+            handler_class = cls.handlers["default"]
         return handler_class(*args, **kwargs)

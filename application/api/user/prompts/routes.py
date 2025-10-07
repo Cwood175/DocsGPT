@@ -1,14 +1,15 @@
 """Prompt management routes."""
 
-import os
-
-from bson.objectid import ObjectId
 from flask import current_app, jsonify, make_response, request
 from flask_restx import fields, Namespace, Resource
 
 from application.api import api
 from application.api.user.base import current_dir, prompts_collection
 from application.utils import check_required_fields
+
+import os
+
+from bson.objectid import ObjectId
 
 prompts_ns = Namespace(
     "prompts", description="Prompt management operations", path="/api"
@@ -50,7 +51,7 @@ class CreatePrompt(Resource):
             )
             new_id = str(resp.inserted_id)
         except Exception as err:
-            current_app.logger.error(f"Error creating prompt: {err}", exc_info=True)
+            current_app.logger.error("Error creating prompt: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"id": new_id}), 200)
 
@@ -80,7 +81,7 @@ class GetPrompts(Resource):
                     }
                 )
         except Exception as err:
-            current_app.logger.error(f"Error retrieving prompts: {err}", exc_info=True)
+            current_app.logger.error("Error retrieving prompts: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify(list_prompts), 200)
 
@@ -123,7 +124,7 @@ class GetSinglePrompt(Resource):
                 {"_id": ObjectId(prompt_id), "user": user}
             )
         except Exception as err:
-            current_app.logger.error(f"Error retrieving prompt: {err}", exc_info=True)
+            current_app.logger.error("Error retrieving prompt: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"content": prompt["content"]}), 200)
 
@@ -150,7 +151,7 @@ class DeletePrompt(Resource):
         try:
             prompts_collection.delete_one({"_id": ObjectId(data["id"]), "user": user})
         except Exception as err:
-            current_app.logger.error(f"Error deleting prompt: {err}", exc_info=True)
+            current_app.logger.error("Error deleting prompt: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -186,6 +187,6 @@ class UpdatePrompt(Resource):
                 {"$set": {"name": data["name"], "content": data["content"]}},
             )
         except Exception as err:
-            current_app.logger.error(f"Error updating prompt: {err}", exc_info=True)
+            current_app.logger.error("Error updating prompt: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)

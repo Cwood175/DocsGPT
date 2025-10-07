@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import Any, Dict, Optional
 
 from bson.dbref import DBRef
-
 from bson.objectid import ObjectId
 
 from application.agents.agent_creator import AgentCreator
@@ -160,7 +159,7 @@ class StreamProcessor:
                 )
             return str(agent["key"]), not is_owner, agent.get("shared_token")
         except Exception as e:
-            logger.error(f"Error in get_agent_key: {str(e)}", exc_info=True)
+            logger.error(f"Error in get_agent_key: {e}")
             raise
 
     def _get_data_from_api_key(self, api_key: str) -> Dict[str, Any]:
@@ -256,9 +255,11 @@ class StreamProcessor:
                     "prompt_id": data_key.get("prompt_id", "default"),
                     "agent_type": data_key.get("agent_type", settings.AGENT_NAME),
                     "user_api_key": api_key,
-                    "json_schema": data_key.get("json_schema"),
                 }
             )
+            json_schema = data_key.get("json_schema")
+            if json_schema is not None:
+                self.agent_config["json_schema"] = json_schema
             self.initial_user_id = data_key.get("user")
             self.decoded_token = {"sub": data_key.get("user")}
             if data_key.get("source"):

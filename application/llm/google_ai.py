@@ -266,11 +266,7 @@ class GoogleLLM(BaseLLM):
                         parameters={
                             "type": "OBJECT",
                             "properties": cleaned_properties,
-                            "required": (
-                                parameters["required"]
-                                if "required" in parameters
-                                else []
-                            ),
+                            "required": parameters.get("required", []),
                         },
                     )
                 else:
@@ -363,8 +359,9 @@ class GoogleLLM(BaseLLM):
             if has_attachments:
                 break
 
-        logging.info(
-            f"GoogleLLM: Starting stream generation. Model: {model}, Messages: {json.dumps(messages, default=str)}, Has attachments: {has_attachments}"
+        logger = logging.getLogger(__name__)
+        logger.info(
+            f"GoogleLLM: Starting stream generation. Model: {model}, Messages: {json.dumps(messages, default=str)!s}, Has attachments: {has_attachments}"
         )
 
         response = client.models.generate_content_stream(
@@ -456,7 +453,7 @@ class GoogleLLM(BaseLLM):
 
         try:
             return convert(json_schema)
-        except Exception as e:
+        except ValueError as e:
             logging.error(
                 f"Error preparing structured output format for Google: {e}",
                 exc_info=True,

@@ -1,4 +1,5 @@
 import logging
+
 from application.core.settings import settings
 from application.vectorstore.base import BaseVectorStore
 from application.vectorstore.document_class import Document
@@ -173,5 +174,5 @@ class MongoDBVectorStore(BaseVectorStore):
             result = self._collection.delete_one({"_id": object_id})
             return result.deleted_count > 0
         except Exception as e:
-            logging.error(f"Error deleting chunk: {e}", exc_info=True)
+            self._logger.error("Error deleting chunk: %s", e, exc_info=True)
             return False

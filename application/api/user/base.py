@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 """
 Shared utilities, database connections, and helper functions for user API routes.
 """

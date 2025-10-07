@@ -1,7 +1,8 @@
 import uuid
-from typing import Any, Dict, Generator
 
 from application.llm.handlers.base import LLMHandler, LLMResponse, ToolCall
+from collections.abc import Generator
+from typing import Any
 
 
 class GoogleLLMHandler(LLMHandler):

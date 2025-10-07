@@ -1,10 +1,11 @@
-import os
-from typing import Dict, Generator, List, Any
 import logging
+import os
 
 from application.agents.base import BaseAgent
 from application.logging import build_stack_data, LogContext
 from application.retriever.base import BaseRetriever
+
+from typing import Any, Generator, list, dict
 
 logger = logging.getLogger(__name__)
 
@@ -230,7 +231,7 @@ class ReActAgent(BaseAgent):
         if "{summaries}" in plan_prompt_filled:
             summaries = docs_data if docs_data else "No documents retrieved."
             plan_prompt_filled = plan_prompt_filled.replace("{summaries}", summaries)
-        plan_prompt_filled = plan_prompt_filled.replace("{prompt}", self.prompt or "")
+        plan_prompt_filled = plan_prompt_filled.replace("{prompt}", str(self.prompt or ""))
         plan_prompt_filled = plan_prompt_filled.replace(
             "{observations}", "\n".join(self.observations)
         )

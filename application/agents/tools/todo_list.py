@@ -1,8 +1,8 @@
 import datetime
 import uuid
-from typing import Any, Dict, List, Optional
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
+from typing import Any
 
 from .base import Tool
 
@@ -40,7 +40,7 @@ class TodoListTool(Tool):
             self._col = self._db[self.collection_name]
             # Ensure an index on user_id, tool_id
             self._col.create_index([("user_id", 1), ("tool_id", 1)], unique=True)
-        except Exception:
+        except (ConnectionError, TypeError):
             self._client = None
             self._db = None
             self._col = None
@@ -68,9 +68,9 @@ class TodoListTool(Tool):
     # -----------------------------
     # Actions
     # -----------------------------
-    def _create_todo(self, title: str, description: str = "", due_date: Optional[str] = None, metadata: Optional[Dict] = None):
+    def _create_todo(self, title: str, description: str = "", due_date: str | None = None, metadata: dict | None = None):
         self._ensure_connection()
-        now = datetime.datetime.utcnow()
+        now = datetime.datetime.now(datetime.timezone.utc)
         doc = {
             "title": title,
             "description": description,
@@ -90,13 +90,13 @@ class TodoListTool(Tool):
             return {"status_code": 404, "message": "Todo not found"}
         return {"status_code": 200, "todo": doc}
 
-    def _update_todo(self, updates: Dict[str, Any]):
+    def _update_todo(self, updates: dict[str, Any]):
         self._ensure_connection()
         allowed = {"title", "description", "status", "due_date", "metadata"}
         set_fields = {k: v for k, v in updates.items() if k in allowed}
         if not set_fields:
             return {"status_code": 400, "message": "No valid fields to update"}
-        set_fields["updated_at"] = datetime.datetime.utcnow()
+        set_fields["updated_at"] = datetime.datetime.now(datetime.timezone.utc)
         result = self._col.update_one({"user_id": self.user_id, "tool_id": self.tool_id}, {"$set": set_fields})
         if result.matched_count == 0:
             return {"status_code": 404, "message": "Todo not found"}

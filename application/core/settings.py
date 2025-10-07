@@ -102,15 +102,15 @@ class Settings(BaseSettings):
     QDRANT_DISTANCE_FUNC: str = "Cosine"
 
     # PGVector vectorstore config
-    PGVECTOR_CONNECTION_STRING: Optional[str] = None
+    PGVECTOR_CONNECTION_STRING: str | None = None
     # Milvus vectorstore config
-    MILVUS_COLLECTION_NAME: Optional[str] = "docsgpt"
-    MILVUS_URI: Optional[str] = "./milvus_local.db"  # milvus lite version as default
-    MILVUS_TOKEN: Optional[str] = ""
+    MILVUS_COLLECTION_NAME: str | None = "docsgpt"
+    MILVUS_URI: str | None = "./milvus_local.db"  # milvus lite version as default
+    MILVUS_TOKEN: str | None = ""
 
     # LanceDB vectorstore config
     LANCEDB_PATH: str = "/tmp/lancedb"  # Path where LanceDB stores its local data
-    LANCEDB_TABLE_NAME: Optional[str] = (
+    LANCEDB_TABLE_NAME: str | None = (
         "docsgpts"  # Name of the table to use for storing vectors
     )
 
@@ -123,7 +123,7 @@ class Settings(BaseSettings):
     # Encryption settings
     ENCRYPTION_SECRET_KEY: str = "default-docsgpt-encryption-key"
 
-    ELEVENLABS_API_KEY: Optional[str] = None
+    ELEVENLABS_API_KEY: str | None = None
 
 path = Path(__file__).parent.parent.absolute()
 settings = Settings(_env_file=path.joinpath(".env"), _env_file_encoding="utf-8")

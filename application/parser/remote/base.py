@@ -1,19 +1,20 @@
 """Base reader class."""
 from abc import abstractmethod
-from typing import Any, List
 
-from langchain.docstore.document import Document as LCDocument
 from application.parser.schema.base import Document
+from langchain.docstore.document import Document as LCDocument
+
+from typing import Any
 
 
 class BaseRemote:
     """Utilities for loading data from a directory."""
 
     @abstractmethod
-    def load_data(self, *args: Any, **load_kwargs: Any) -> List[Document]:
+    def load_data(self, *args: Any, **load_kwargs: Any) -> list[Document]:
         """Load data from the input directory."""
 
-    def load_langchain_documents(self, **load_kwargs: Any) -> List[LCDocument]:
+    def load_langchain_documents(self, **load_kwargs: Any) -> list[LCDocument]:
         """Load data in LangChain document format."""
         docs = self.load_data(**load_kwargs)
         return [d.to_langchain_format() for d in docs]

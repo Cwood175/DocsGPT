@@ -2,16 +2,16 @@
 
 import os
 
-from bson.objectid import ObjectId
-from flask import current_app, jsonify, make_response, request
-from flask_restx import fields, Namespace, Resource
-
 from application.api import api
 from application.api.user.base import agents_collection, storage
 from application.api.user.tasks import store_attachment
 from application.core.settings import settings
 from application.tts.google_tts import GoogleTTS
 from application.utils import safe_filename
+
+from bson.objectid import ObjectId
+from flask import current_app, jsonify, make_response, request
+from flask_restx import fields, Namespace, Resource
 
 
 attachments_ns = Namespace(
@@ -86,7 +86,7 @@ class StoreAttachment(Resource):
                 200,
             )
         except Exception as err:
-            current_app.logger.error(f"Error storing attachment: {err}", exc_info=True)
+            current_app.logger.error("Error storing attachment: %s", err)
             return make_response(jsonify({"success": False, "error": str(err)}), 400)
 
 
@@ -110,7 +110,7 @@ class ServeImage(Resource):
                 jsonify({"success": False, "message": "Image not found"}), 404
             )
         except Exception as e:
-            current_app.logger.error(f"Error serving image: {e}")
+            current_app.logger.error("Error serving image: %s", e)
             return make_response(
                 jsonify({"success": False, "message": "Error retrieving image"}), 500
             )

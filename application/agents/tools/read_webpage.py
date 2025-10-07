@@ -1,7 +1,9 @@
+from urllib.parse import urlparse
+
 import requests
 from markdownify import markdownify
+
 from application.agents.tools.base import Tool
-from urllib.parse import urlparse
 
 class ReadWebpageTool(Tool):
     """
@@ -45,12 +47,14 @@ class ReadWebpageTool(Tool):
             
             
             markdown_content = markdownify(html_content, heading_style="ATX", newline_style="BACKSLASH")
+            if markdown_content is None:
+                return "Error: Could not convert webpage content to Markdown."
             
             return markdown_content
 
         except requests.exceptions.RequestException as e:
             return f"Error fetching URL {url}: {e}"
-        except Exception as e:
+        except TypeError as e:
             return f"Error processing URL {url}: {e}"
 
     def get_actions_metadata(self):

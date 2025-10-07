@@ -1,16 +1,16 @@
-from application.vectorstore.base import BaseVectorStore
 from application.core.settings import settings
+from application.vectorstore.base import BaseVectorStore
 from application.vectorstore.document_class import Document
 
 
 class ElasticsearchStore(BaseVectorStore):
     _es_connection = None  # Class attribute to hold the Elasticsearch connection
 
-    def __init__(self, source_id, embeddings_key, index_name=settings.ELASTIC_INDEX):
+    def __init__(self, source_id, embeddings_key, index_name=None):
         super().__init__()
         self.source_id = source_id.replace("application/indexes/", "").rstrip("/")
         self.embeddings_key = embeddings_key
-        self.index_name = index_name
+        self.index_name = index_name or settings.ELASTIC_INDEX
         
         if ElasticsearchStore._es_connection is None:
             connection_params = {}
@@ -68,12 +68,12 @@ class ElasticsearchStore(BaseVectorStore):
         )
         try:
             es_client.info()
-        except Exception as e:
-            raise e
+        except Exception:
+            raise
 
         return es_client
 
-    def search(self, question, k=2, index_name=settings.ELASTIC_INDEX, *args, **kwargs):
+    def search(self, question, k=2, index_name=settings.ELASTIC_INDEX):
         embeddings = self._get_embeddings(settings.EMBEDDINGS_NAME, self.embeddings_key)
         vector = embeddings.embed_query(question)
         knn = {
@@ -148,7 +148,6 @@ class ElasticsearchStore(BaseVectorStore):
         refresh_indices = True,
         create_index_if_not_exists = True,
         bulk_kwargs = None,
-        **kwargs,
         ):
         
         bulk_kwargs = bulk_kwargs or {}
@@ -197,7 +196,7 @@ class ElasticsearchStore(BaseVectorStore):
                 print(f"Error adding texts: {e}")
                 firstError = e.errors[0].get("index", {}).get("error", {})
                 print(f"First error reason: {firstError.get('reason')}")
-                raise e
+                raise
 
         else:
             return []

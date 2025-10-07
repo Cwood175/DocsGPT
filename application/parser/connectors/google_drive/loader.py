@@ -6,10 +6,10 @@ Loads documents from Google Drive using Google Drive API.
 import io
 import logging
 import os
-from typing import List, Dict, Any, Optional
+from typing import Any
 
-from googleapiclient.http import MediaIoBaseDownload
 from googleapiclient.errors import HttpError
+from googleapiclient.http import MediaIoBaseDownload
 
 from application.parser.connectors.base import BaseConnectorLoader
 from application.parser.connectors.google_drive.auth import GoogleDriveAuth
@@ -57,7 +57,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
 
         try:
             self.service = self.auth.build_drive_service(self.credentials)
-        except Exception as e:
+        except (ValueError, RuntimeError) as e:
             logging.warning(f"Could not build Google Drive service: {e}")
             self.service = None
 
@@ -65,17 +65,15 @@ class GoogleDriveLoader(BaseConnectorLoader):
 
 
 
-    def _process_file(self, file_metadata: Dict[str, Any], load_content: bool = True) -> Optional[Document]:
+    def _process_file(self, file_metadata: dict[str, Any], load_content: bool = True) -> Document | None:
         try:
-            file_id = file_metadata.get('id')
+            file_id = file_metadata['id']
             file_name = file_metadata.get('name', 'Unknown')
             mime_type = file_metadata.get('mimeType', 'application/octet-stream')
 
             if mime_type not in self.SUPPORTED_MIME_TYPES and not mime_type.startswith('application/vnd.google-apps.'):
                 return None
-            if mime_type not in self.SUPPORTED_MIME_TYPES and not mime_type.startswith('application/vnd.google-apps.'):
-                logging.info(f"Skipping unsupported file type: {mime_type} for file {file_name}")
-                return None
+
             # Google Drive provides timezone-aware ISO8601 dates
             doc_metadata = {
                 'file_name': file_name,
@@ -106,17 +104,17 @@ class GoogleDriveLoader(BaseConnectorLoader):
             )
 
         except Exception as e:
-            logging.error(f"Error processing file: {e}")
+            logging.error(f"Error processing file: {str(e)}")
             return None
 
-    def load_data(self, inputs: Dict[str, Any]) -> List[Document]:
+    def load_data(self, inputs: dict[str, Any]) -> list[Document]:
         session_token = inputs.get('session_token')
         if session_token and session_token != self.session_token:
             logging.warning("Session token in inputs differs from loader's session token. Using loader's session token.")
         self.config = inputs
 
         try:
-            documents: List[Document] = []
+            documents: list[Document] = []
 
             folder_id = inputs.get('folder_id')
             file_ids = inputs.get('file_ids', [])
@@ -164,12 +162,12 @@ class GoogleDriveLoader(BaseConnectorLoader):
             return documents
 
         except Exception as e:
-            logging.error(f"Error loading data from Google Drive: {e}", exc_info=True)
+            logging.error(f"Error loading data from Google Drive: {str(e)}")
             raise
 
 
 
-    def _load_file_by_id(self, file_id: str, load_content: bool = True) -> Optional[Document]:
+    def _load_file_by_id(self, file_id: str, load_content: bool = True) -> Document | None:
         self._ensure_service()
 
         try:
@@ -184,7 +182,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
             logging.error(f"HTTP error loading file {file_id}: {e.resp.status} - {e.content}")
 
             if e.resp.status in [401, 403]:
-                if hasattr(self.credentials, 'refresh_token') and self.credentials.refresh_token:
+                if self.credentials.refresh_token:
                     try:
                         from google.auth.transport.requests import Request
                         self.credentials.refresh(Request())
@@ -197,14 +195,14 @@ class GoogleDriveLoader(BaseConnectorLoader):
 
             return None
         except Exception as e:
-            logging.error(f"Error loading file {file_id}: {e}")
+            logging.error(f"Error loading file {file_id}: {str(e)}")
             return None
 
 
-    def _list_items_in_parent(self, parent_id: str, limit: int = 100, load_content: bool = False, page_token: Optional[str] = None, search_query: Optional[str] = None) -> List[Document]:
+    def _list_items_in_parent(self, parent_id: str, limit: int = 100, load_content: bool = False, page_token: str | None = None, search_query: str | None = None) -> list[Document]:
         self._ensure_service()
 
-        documents: List[Document] = []
+        documents: list[Document] = []
 
         try:
             query = f"'{parent_id}' in parents and trashed=false"
@@ -212,8 +210,6 @@ class GoogleDriveLoader(BaseConnectorLoader):
             if search_query:
                 safe_search = search_query.replace("'", "\\'")
                 query += f" and name contains '{safe_search}'"
-
-            next_token_out: Optional[str] = None
 
             while True:
                 page_size = 100
@@ -256,30 +252,29 @@ class GoogleDriveLoader(BaseConnectorLoader):
                         return documents
 
                 page_token = results.get('nextPageToken')
-                next_token_out = page_token
                 if not page_token:
                     break
 
-            self.next_page_token = next_token_out
+            self.next_page_token = page_token
             return documents
         except Exception as e:
-            logging.error(f"Error listing items under parent {parent_id}: {e}")
+            logging.error(f"Error listing items under parent {parent_id}: {str(e)}")
             return documents
 
 
 
 
-    def _download_file_content(self, file_id: str, mime_type: str) -> Optional[str]:
+    def _download_file_content(self, file_id: str, mime_type: str) -> str | None:
         if not self.credentials.token:
             logging.warning("No access token in credentials, attempting to refresh")
-            if hasattr(self.credentials, 'refresh_token') and self.credentials.refresh_token:
+            if self.credentials.refresh_token:
                 try:
                     from google.auth.transport.requests import Request
                     self.credentials.refresh(Request())
                     logging.info("Credentials refreshed successfully")
                     self._ensure_service()
                 except Exception as e:
-                    logging.error(f"Failed to refresh credentials: {e}")
+                    logging.error(f"Failed to refresh credentials: {str(e)}")
                     raise ValueError("Authentication failed and cannot be refreshed: missing or invalid refresh_token")
             else:
                 logging.error("No access token and no refresh_token available")
@@ -287,22 +282,22 @@ class GoogleDriveLoader(BaseConnectorLoader):
 
         if self.credentials.expired:
             logging.warning("Credentials are expired, attempting to refresh")
-            if hasattr(self.credentials, 'refresh_token') and self.credentials.refresh_token:
+            if self.credentials.refresh_token:
                 try:
                     from google.auth.transport.requests import Request
                     self.credentials.refresh(Request())
                     logging.info("Credentials refreshed successfully")
                     self._ensure_service()
                 except Exception as e:
-                    logging.error(f"Failed to refresh expired credentials: {e}")
+                    logging.error(f"Failed to refresh expired credentials: {str(e)}")
                     raise ValueError("Authentication failed and cannot be refreshed: expired credentials")
             else:
                 logging.error("Credentials expired and no refresh_token available")
                 raise ValueError("Authentication failed and cannot be refreshed: missing refresh_token")
 
         try:
-            if mime_type in self.EXPORT_FORMATS:
-                export_mime_type = self.EXPORT_FORMATS[mime_type]
+            export_mime_type = self.EXPORT_FORMATS.get(mime_type)
+            if export_mime_type:
                 request = self.service.files().export_media(
                     fileId=file_id,
                     mimeType=export_mime_type
@@ -321,7 +316,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
                     logging.error(f"HTTP error downloading file {file_id}: {e.resp.status} - {e.content}")
                     return None
                 except Exception as e:
-                    logging.error(f"Error during download of file {file_id}: {e}")
+                    logging.error(f"Error during download of file {file_id}: {str(e)}")
                     return None
 
             content_bytes = file_io.getvalue()
@@ -343,7 +338,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
             if e.resp.status in [401, 403]:
                 logging.error(f"Authentication error downloading file {file_id}")
 
-                if hasattr(self.credentials, 'refresh_token') and self.credentials.refresh_token:
+                if self.credentials.refresh_token:
                     logging.info(f"Attempting to refresh credentials for file {file_id}")
                     try:
                         from google.auth.transport.requests import Request
@@ -353,7 +348,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
                         self._ensure_service()
                         return None
                     except Exception as refresh_error:
-                        logging.error(f"Error refreshing credentials: {refresh_error}")
+                        logging.error(f"Error refreshing credentials: {str(refresh_error)}")
                         raise ValueError(f"Authentication failed and could not be refreshed: {refresh_error}")
                 else:
                     logging.error("Cannot refresh credentials: missing refresh_token")
@@ -361,7 +356,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
 
             return None
         except Exception as e:
-            logging.error(f"Error downloading file {file_id}: {e}")
+            logging.error(f"Error downloading file {file_id}: {str(e)}")
             return None
 
 
@@ -370,7 +365,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
             self._ensure_service()
             return self._download_single_file(file_id, local_dir)
         except Exception as e:
-            logging.error(f"Error downloading file {file_id}: {e}", exc_info=True)
+            logging.error(f"Error downloading file {file_id}: {str(e)}")
             return False
 
     def _ensure_service(self):
@@ -395,15 +390,15 @@ class GoogleDriveLoader(BaseConnectorLoader):
         os.makedirs(local_dir, exist_ok=True)
         full_path = os.path.join(local_dir, file_name)
 
-        if mime_type in self.EXPORT_FORMATS:
-            export_mime_type = self.EXPORT_FORMATS[mime_type]
+        export_mime_type = self.EXPORT_FORMATS.get(mime_type)
+        if export_mime_type:
+            extension = self._get_extension_for_mime_type(export_mime_type)
+            if not full_path.endswith(extension):
+                full_path += extension
             request = self.service.files().export_media(
                 fileId=file_id,
                 mimeType=export_mime_type
             )
-            extension = self._get_extension_for_mime_type(export_mime_type)
-            if not full_path.endswith(extension):
-                full_path += extension
         else:
             request = self.service.files().get_media(fileId=file_id)
 
@@ -439,26 +434,22 @@ class GoogleDriveLoader(BaseConnectorLoader):
                     item_id = item['id']
                     mime_type = item['mimeType']
 
-                    if mime_type == 'application/vnd.google-apps.folder':
-                        if recursive:
-                            # Create subfolder and recurse
-                            subfolder_path = os.path.join(local_dir, item_name)
-                            os.makedirs(subfolder_path, exist_ok=True)
-                            subfolder_files = self._download_folder_recursive(
-                                item_id,
-                                subfolder_path,
-                                recursive
-                            )
-                            files_downloaded += subfolder_files
-                            logging.info(f"Downloaded {subfolder_files} files from subfolder {item_name}")
+                    if mime_type == 'application/vnd.google-apps.folder' and recursive:
+                        # Create subfolder and recurse
+                        subfolder_path = os.path.join(local_dir, item_name)
+                        os.makedirs(subfolder_path, exist_ok=True)
+                        subfolder_files = self._download_folder_recursive(
+                            item_id,
+                            subfolder_path,
+                            recursive
+                        )
+                        files_downloaded += subfolder_files
+                        logging.info(f"Downloaded {subfolder_files} files from subfolder {item_name}")
+                    elif self._download_single_file(item_id, local_dir):
+                        files_downloaded += 1
+                        logging.info(f"Downloaded file: {item_name}")
                     else:
-                        # Download file
-                        success = self._download_single_file(item_id, local_dir)
-                        if success:
-                            files_downloaded += 1
-                            logging.info(f"Downloaded file: {item_name}")
-                        else:
-                            logging.warning(f"Failed to download file: {item_name}")
+                        logging.warning(f"Failed to download file: {item_name}")
 
                 page_token = results.get('nextPageToken')
                 if not page_token:
@@ -467,7 +458,7 @@ class GoogleDriveLoader(BaseConnectorLoader):
             return files_downloaded
 
         except Exception as e:
-            logging.error(f"Error in _download_folder_recursive for folder {folder_id}: {e}", exc_info=True)
+            logging.error(f"Error in _download_folder_recursive for folder {folder_id}: {str(e)}")
             return files_downloaded
 
     def _get_extension_for_mime_type(self, mime_type: str) -> str:
@@ -504,38 +495,36 @@ class GoogleDriveLoader(BaseConnectorLoader):
 
             self._ensure_service()
 
-            if file_ids:
-                if isinstance(file_ids, str):
-                    file_ids = [file_ids]
+            if isinstance(file_ids, str):
+                file_ids = [file_ids]
 
-                for file_id in file_ids:
-                    if self._download_file_to_directory(file_id, local_dir):
-                        files_downloaded += 1
+            for file_id in file_ids:
+                if self._download_file_to_directory(file_id, local_dir):
+                    files_downloaded += 1
 
             # Process folders
-            if folder_ids:
-                if isinstance(folder_ids, str):
-                    folder_ids = [folder_ids]
+            if isinstance(folder_ids, str):
+                folder_ids = [folder_ids]
 
-                for folder_id in folder_ids:
-                    try:
-                        folder_metadata = self.service.files().get(
-                            fileId=folder_id,
-                            fields='name'
-                        ).execute()
-                        folder_name = folder_metadata.get('name', '')
-                        folder_path = os.path.join(local_dir, folder_name)
-                        os.makedirs(folder_path, exist_ok=True)
+            for folder_id in folder_ids:
+                try:
+                    folder_metadata = self.service.files().get(
+                        fileId=folder_id,
+                        fields='name'
+                    ).execute()
+                    folder_name = folder_metadata.get('name', '')
+                    folder_path = os.path.join(local_dir, folder_name)
+                    os.makedirs(folder_path, exist_ok=True)
 
-                        folder_files = self._download_folder_recursive(
-                            folder_id,
-                            folder_path,
-                            recursive
-                        )
-                        files_downloaded += folder_files
-                        logging.info(f"Downloaded {folder_files} files from folder {folder_name}")
-                    except Exception as e:
-                        logging.error(f"Error downloading folder {folder_id}: {e}", exc_info=True)
+                    folder_files = self._download_folder_recursive(
+                        folder_id,
+                        folder_path,
+                        recursive
+                    )
+                    files_downloaded += folder_files
+                    logging.info(f"Downloaded {folder_files} files from folder {folder_name}")
+                except Exception as e:
+                    logging.error(f"Error downloading folder {folder_id}: {str(e)}")
 
             if not file_ids and not folder_ids:
                 raise ValueError("No folder_ids or file_ids provided for download")

@@ -38,7 +38,11 @@ def create_markdown_from_directory(directory=".", output_file="combined.md"):
                     outfile.write(content)
                     outfile.write("\n\n---\n\n")  # Separator between files
 
-                except Exception as e:
+                except FileNotFoundError as e:
+                    print(f"Error processing file {filepath}: {e}")
+                except PermissionError as e:
+                    print(f"Error processing file {filepath}: {e}")
+                except UnicodeDecodeError as e:
                     print(f"Error processing file {filepath}: {e}")
 
     print(f"Successfully created {output_file}")

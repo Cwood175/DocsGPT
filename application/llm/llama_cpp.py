@@ -1,6 +1,7 @@
-from application.llm.base import BaseLLM
-from application.core.settings import settings
 import threading
+
+from application.core.settings import settings
+from application.llm.base import BaseLLM
 
 
 class LlamaSingleton:
@@ -30,14 +31,14 @@ class LlamaCpp(BaseLLM):
         self,
         api_key=None,
         user_api_key=None,
-        llm_name=settings.LLM_PATH,
+        llm_name=None,
         *args,
         **kwargs,
     ):
         super().__init__(*args, **kwargs)
         self.api_key = api_key
         self.user_api_key = user_api_key
-        self.llama = LlamaSingleton.get_instance(llm_name)
+        self.llama = LlamaSingleton.get_instance(llm_name or settings.LLM_PATH)
 
     def _raw_gen(self, baseself, model, messages, stream=False, **kwargs):
         context = messages[0]["content"]

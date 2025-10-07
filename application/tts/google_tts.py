@@ -1,12 +1,12 @@
-import io
 import base64
+import io
+
 from gtts import gTTS
 from application.tts.base import BaseTTS
 
 
 class GoogleTTS(BaseTTS):
     def __init__(self):
-        pass
 
 
     def text_to_speech(self, text):

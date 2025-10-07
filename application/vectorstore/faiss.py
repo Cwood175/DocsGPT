@@ -1,6 +1,6 @@
+import io
 import os
 import tempfile
-import io
 
 from langchain_community.vectorstores import FAISS
 
@@ -56,7 +56,7 @@ class FaissStore(BaseVectorStore):
                     self.docsearch = FAISS.load_local(
                         temp_dir, self.embeddings, allow_dangerous_deserialization=True
                     )
-        except Exception as e:
+        except (FileNotFoundError, ValueError) as e:
             raise Exception(f"Error loading FAISS index: {str(e)}")
 
         self.assert_embedding_dimensions(self.embeddings)
@@ -117,7 +117,7 @@ class FaissStore(BaseVectorStore):
             docsearch_index_dimension = self.docsearch.index.d
             if word_embedding_dimension != docsearch_index_dimension:
                 raise ValueError(
-                    f"Embedding dimension mismatch: embeddings.dimension ({word_embedding_dimension}) != docsearch index dimension ({docsearch_index_dimension})"
+                    f"Embedding dimension mismatch: embeddings.dimension ({word_embedding_dimension!s}) != docsearch index dimension ({docsearch_index_dimension!s})"
                 )
 
     def get_chunks(self):
@@ -136,7 +136,7 @@ class FaissStore(BaseVectorStore):
         """Add a new chunk and save to storage."""
         metadata = metadata or {}
         doc = Document(text=text, extra_info=metadata).to_langchain_format()
-        doc_id = self.docsearch.add_documents([doc])
+        doc_id = self.docsearch.add_documents(doc)
         self._save_to_storage()
         return doc_id
 

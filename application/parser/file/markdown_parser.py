@@ -5,10 +5,11 @@ Contains parser for md files.
 """
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union, cast
 
 import tiktoken
 from application.parser.file.base_parser import BaseParser
+
+from typing import Any, cast
 
 
 class MarkdownParser(BaseParser):
@@ -20,13 +21,13 @@ class MarkdownParser(BaseParser):
     """
 
     def __init__(
-            self,
-            *args: Any,
-            remove_hyperlinks: bool = True,
-            remove_images: bool = True,
-            max_tokens: int = 2048,
-            # remove_tables: bool = True,
-            **kwargs: Any,
+        self,
+        *args: Any,
+        remove_hyperlinks: bool | None = None,
+        remove_images: bool | None = None,
+        max_tokens: int | None = None,
+        # remove_tables: bool = True,
+        **kwargs: Any,
     ) -> None:
         """Init params."""
         super().__init__(*args, **kwargs)

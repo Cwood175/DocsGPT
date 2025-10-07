@@ -1,5 +1,7 @@
+from typing import Any, Dict, List, Optional
+
 import logging
-from typing import List, Optional, Any, Dict
+
 from application.core.settings import settings
 from application.vectorstore.base import BaseVectorStore
 from application.vectorstore.document_class import Document
@@ -39,11 +41,11 @@ class PGVectorStore(BaseVectorStore):
             import psycopg2
             from psycopg2.extras import Json
             import pgvector.psycopg2
-        except ImportError:
+        except ImportError as exc:
             raise ImportError(
                 "Could not import required packages. "
                 "Please install with `pip install psycopg2-binary pgvector`."
-            )
+            ) from exc
 
         self._psycopg2 = psycopg2
         self._Json = Json
@@ -136,8 +138,8 @@ class PGVectorStore(BaseVectorStore):
             
             return documents
             
-        except Exception as e:
-            logging.error(f"Error searching documents: {e}", exc_info=True)
+        except (psycopg2.OperationalError, psycopg2.ProgrammingError, psycopg2.Error) as exc:
+            logging.error(f"Error searching documents: {exc}")
             return []
         finally:
             cursor.close()
@@ -178,9 +180,9 @@ class PGVectorStore(BaseVectorStore):
             conn.commit()
             return inserted_ids
             
-        except Exception as e:
+        except (psycopg2.OperationalError, psycopg2.ProgrammingError, psycopg2.Error) as exc:
             conn.rollback()
-            logging.error(f"Error adding texts: {e}")
+            logging.error(f"Error adding texts: {exc}")
             raise
         finally:
             cursor.close()
@@ -195,9 +197,9 @@ class PGVectorStore(BaseVectorStore):
             cursor.execute(delete_query, (self._source_id,))
             conn.commit()
             
-        except Exception as e:
+        except (psycopg2.OperationalError, psycopg2.ProgrammingError, psycopg2.Error) as exc:
             conn.rollback()
-            logging.error(f"Error deleting index: {e}")
+            logging.error(f"Error deleting index: {exc}")
             raise
         finally:
             cursor.close()
@@ -230,8 +232,8 @@ class PGVectorStore(BaseVectorStore):
             
             return chunks
             
-        except Exception as e:
-            logging.error(f"Error getting chunks: {e}")
+        except (psycopg2.OperationalError, psycopg2.ProgrammingError, psycopg2.Error) as exc:
+            logging.error(f"Error getting chunks: {exc}")
             return []
         finally:
             cursor.close()
@@ -270,9 +272,9 @@ class PGVectorStore(BaseVectorStore):
             
             return str(inserted_id)
             
-        except Exception as e:
+        except (psycopg2.OperationalError, psycopg2.ProgrammingError, psycopg2.Error) as exc:
             conn.rollback()
-            logging.error(f"Error adding chunk: {e}")
+            logging.error(f"Error adding chunk: {exc}")
             raise
         finally:
             cursor.close()
@@ -290,9 +292,9 @@ class PGVectorStore(BaseVectorStore):
             
             return deleted_count > 0
             
-        except Exception as e:
+        except (psycopg2.OperationalError, psycopg2.ProgrammingError, psycopg2.Error) as exc:
             conn.rollback()
-            logging.error(f"Error deleting chunk: {e}")
+            logging.error(f"Error deleting chunk: {exc}")
             return False
         finally:
             cursor.close()

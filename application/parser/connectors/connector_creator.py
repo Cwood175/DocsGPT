@@ -1,5 +1,5 @@
-from application.parser.connectors.google_drive.loader import GoogleDriveLoader
 from application.parser.connectors.google_drive.auth import GoogleDriveAuth
+from application.parser.connectors.google_drive.loader import GoogleDriveLoader
 
 
 class ConnectorCreator:
@@ -10,13 +10,17 @@ class ConnectorCreator:
     authentication and connect to external document storage systems.
     """
 
-    connectors = {
-        "google_drive": GoogleDriveLoader,
-    }
+    connectors = None
+    auth_providers = None
 
-    auth_providers = {
-        "google_drive": GoogleDriveAuth,
-    }
+    def __init_subclass__(cls):
+        super().__init_subclass__()
+        cls.connectors = {
+            "google_drive": GoogleDriveLoader,
+        }
+        cls.auth_providers = {
+            "google_drive": GoogleDriveAuth,
+        }
 
     @classmethod
     def create_connector(cls, connector_type, *args, **kwargs):

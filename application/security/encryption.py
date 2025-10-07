@@ -44,7 +44,7 @@ def encrypt_credentials(credentials: dict, user_id: str) -> str:
 
         result = salt + iv + encrypted_data
         return base64.b64encode(result).decode()
-    except Exception as e:
+    except (ValueError, TypeError, OSError) as e:
         print(f"Warning: Failed to encrypt credentials: {e}")
         return ""
 
@@ -68,7 +68,7 @@ def decrypt_credentials(encrypted_data: str, user_id: str) -> dict:
         decrypted_data = _unpad_data(decrypted_padded)
 
         return json.loads(decrypted_data.decode())
-    except Exception as e:
+    except (ValueError, TypeError, OSError) as e:
         print(f"Warning: Failed to decrypt credentials: {e}")
         return {}
 

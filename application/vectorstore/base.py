@@ -1,11 +1,11 @@
-import logging
-import os
 from abc import ABC, abstractmethod
 
-from langchain_openai import OpenAIEmbeddings
-from sentence_transformers import SentenceTransformer
+import logging
+import os
 
 from application.core.settings import settings
+from langchain_openai import OpenAIEmbeddings
+from sentence_transformers import SentenceTransformer
 
 
 class EmbeddingsWrapper:
@@ -27,8 +27,7 @@ class EmbeddingsWrapper:
             logging.info(f"Successfully loaded model with dimension: {self.dimension}")
         except Exception as e:
             logging.error(
-                f"Failed to initialize SentenceTransformer with model {model_name}: {str(e)}",
-                exc_info=True,
+                f"Failed to initialize SentenceTransformer with model {model_name}: {str(e)}"
             )
             raise
 

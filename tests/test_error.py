@@ -1,6 +1,7 @@
 import pytest
-from flask import Flask
+
 from application.error import bad_request, response_error
+from flask import Flask
 
 
 @pytest.fixture

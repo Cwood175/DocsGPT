@@ -1,9 +1,9 @@
 import base64
+import mimetypes
 import requests
-from typing import List
 from application.parser.remote.base import BaseRemote
 from langchain_core.documents import Document
-import mimetypes
+from typing import List
 
 class GitHubLoader(BaseRemote):
     def __init__(self):
@@ -16,28 +16,23 @@ class GitHubLoader(BaseRemote):
     def fetch_file_content(self, repo_url: str, file_path: str) -> str:
         url = f"https://api.github.com/repos/{repo_url}/contents/{file_path}"
         response = requests.get(url, headers=self.headers)
+        response.raise_for_status()
+        content = response.json()
+        mime_type, _ = mimetypes.guess_type(file_path)  # Guess the MIME type based on the file extension
 
-        if response.status_code == 200:
-            content = response.json()
-            mime_type, _ = mimetypes.guess_type(file_path)  # Guess the MIME type based on the file extension
-
-            if content.get("encoding") == "base64":
-                if mime_type and mime_type.startswith("text"):  # Handle only text files
-                    try:
-                        decoded_content = base64.b64decode(content["content"]).decode("utf-8")
-                        return f"Filename: {file_path}\n\n{decoded_content}"
-                    except Exception as e:
-                        raise e
-                else:
-                    return f"Filename: {file_path} is a binary file and was skipped."
+        if content.get("encoding") == "base64":
+            if mime_type and mime_type.startswith("text"):  # Handle only text files
+                decoded_content = base64.b64decode(content["content"]).decode("utf-8")
+                return f"Filename: {file_path}\n\n{decoded_content}"
             else:
-                return f"Filename: {file_path}\n\n{content['content']}"
+                return f"Filename: {file_path} is a binary file and was skipped."
         else:
-            response.raise_for_status()
+            return f"Filename: {file_path}\n\n{content['content']}"
 
     def fetch_repo_files(self, repo_url: str, path: str = "") -> List[str]:
         url = f"https://api.github.com/repos/{repo_url}/contents/{path}"
         response = requests.get(url, headers={**self.headers, "Accept": "application/vnd.github.v3.raw"})
+        response.raise_for_status()
         contents = response.json()
         files = []
         for item in contents:

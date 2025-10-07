@@ -12,5 +12,5 @@ class AgentCreator:
     def create_agent(cls, type, *args, **kwargs):
         agent_class = cls.agents.get(type.lower())
         if not agent_class:
-            raise ValueError(f"No agent class found for type {type}")
+            raise ValueError(f"No agent class found for type {str(type)}")
         return agent_class(*args, **kwargs)

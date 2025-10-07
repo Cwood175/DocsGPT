@@ -2,9 +2,11 @@
 """
 
 import io
+
 import pytest
-from unittest.mock import patch, MagicMock
+
 from botocore.exceptions import ClientError
+from unittest.mock import MagicMock, patch
 
 from application.storage.s3 import S3Storage
 
@@ -152,6 +154,7 @@ class TestS3StorageGetFile:
         test_content = b"file content"
 
         mock_boto3_client.head_object.return_value = {}
+
 
         def mock_download(bucket, key, file_obj):
             file_obj.write(test_content)

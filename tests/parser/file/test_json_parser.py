@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import patch, mock_open
+from unittest.mock import mock_open, patch
 
 from application.parser.file.json_parser import JSONParser
 
@@ -16,8 +16,7 @@ def test_json_parser_parses_dict_concat():
     parser = JSONParser()
     with patch("builtins.open", mock_open(read_data="{}")):
         with patch("json.load", return_value={"a": 1}):
-            result = parser.parse_file(Path("t.json"))
-    assert result == "{'a': 1}"
+            assert parser.parse_file(Path("t.json")) == "{'a': 1}"
 
 
 def test_json_parser_parses_list_no_concat():
@@ -26,16 +25,14 @@ def test_json_parser_parses_list_no_concat():
     data = [{"a": 1}, {"b": 2}]
     with patch("builtins.open", mock_open(read_data="[]")):
         with patch("json.load", return_value=data):
-            result = parser.parse_file(Path("t.json"))
-    assert result == data
+            assert parser.parse_file(Path("t.json")) == data
 
 
 def test_json_parser_row_joiner_config():
     parser = JSONParser(row_joiner=" || ")
     with patch("builtins.open", mock_open(read_data="[]")):
         with patch("json.load", return_value=[{"a": 1}, {"b": 2}]):
-            result = parser.parse_file(Path("t.json"))
-    assert result == "{'a': 1} || {'b': 2}"
+            assert parser.parse_file(Path("t.json")) == "{'a': 1} || {'b': 2}"
 
 
 def test_json_parser_forwards_json_config():

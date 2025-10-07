@@ -1,8 +1,5 @@
 """Agent management webhook handlers."""
 
-import secrets
-
-from bson.objectid import ObjectId
 from flask import current_app, jsonify, make_response, request
 from flask_restx import Namespace, Resource
 
@@ -10,6 +7,8 @@ from application.api import api
 from application.api.user.base import agents_collection, require_agent
 from application.api.user.tasks import process_agent_webhook
 from application.core.settings import settings
+
+import secrets
 
 
 agents_webhooks_ns = Namespace(
@@ -50,10 +49,8 @@ class AgentWebhook(Resource):
                 )
             base_url = settings.API_URL.rstrip("/")
             full_webhook_url = f"{base_url}/api/webhooks/agents/{webhook_token}"
-        except Exception as err:
-            current_app.logger.error(
-                f"Error generating webhook URL: {err}", exc_info=True
-            )
+        except (ValueError, TypeError, KeyError) as err:
+            current_app.logger.exception(f"Error generating webhook URL: {err}")
             return make_response(
                 jsonify({"success": False, "message": "Error generating webhook URL"}),
                 400,

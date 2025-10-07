@@ -9,11 +9,8 @@ from urllib.parse import parse_qs, urlparse
 from application.agents.tools.base import Tool
 from application.api.user.tasks import mcp_oauth_status_task, mcp_oauth_task
 from application.cache import get_redis_instance
-
 from application.core.mongo_db import MongoDB
-
 from application.core.settings import settings
-
 from application.security.encryption import decrypt_credentials
 from fastmcp import Client
 from fastmcp.client.auth import BearerAuth
@@ -24,7 +21,6 @@ from fastmcp.client.transports import (
 )
 from mcp.client.auth import OAuthClientProvider, TokenStorage
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
-
 from pydantic import AnyHttpUrl, ValidationError
 from redis import Redis
 
@@ -279,7 +275,7 @@ class MCPTool(Tool):
             tools = self._run_async_operation("list_tools")
             self.available_tools = tools
             return self.available_tools
-        except Exception as e:
+        except (RuntimeError, ConnectionError, OSError) as e:
             raise Exception(f"Failed to discover tools from MCP server: {str(e)}")
 
     def execute_action(self, action_name: str, **kwargs) -> Any:
@@ -307,7 +303,7 @@ class MCPTool(Tool):
                 "call_tool", action_name, **cleaned_kwargs
             )
             return self._format_result(result)
-        except Exception as e:
+        except (RuntimeError, ConnectionError, OSError) as e:
             raise Exception(f"Failed to execute action '{action_name}': {str(e)}")
 
     def _format_result(self, result) -> Dict:
@@ -353,7 +349,7 @@ class MCPTool(Tool):
                 return self._test_oauth_connection()
             else:
                 return self._test_regular_connection()
-        except Exception as e:
+        except (RuntimeError, ConnectionError, OSError) as e:
             return {
                 "success": False,
                 "message": f"Connection failed: {str(e)}",
@@ -368,7 +364,7 @@ class MCPTool(Tool):
         try:
             self._run_async_operation("ping")
             ping_success = True
-        except Exception:
+        except (RuntimeError, ConnectionError, OSError):
             ping_success = False
         tools = self.discover_tools()
 
@@ -398,7 +394,7 @@ class MCPTool(Tool):
                 "status": "pending",
                 "message": "OAuth flow started",
             }
-        except Exception as e:
+        except (RuntimeError, ConnectionError, OSError) as e:
             return {
                 "success": False,
                 "message": f"OAuth connection failed: {str(e)}",
@@ -640,8 +636,8 @@ class DocsGPTOAuth(OAuthClientProvider):
             else:
                 raise ValueError("No state in auth URL")
             return authorization_url, state
-        except Exception as e:
-            raise Exception(f"Failed to process auth URL: {e}")
+        except ValueError as e:
+            raise e
 
     async def redirect_handler(self, authorization_url: str) -> None:
         """Store auth URL and state in Redis for frontend to use."""
@@ -765,7 +761,7 @@ class DBTokenStorage(TokenStorage):
             {"$set": {"tokens": tokens.model_dump()}},
             True,
         )
-        logging.info(f"Saved tokens for {self.get_base_url(self.server_url)}")
+        logging.info("Saved tokens for %s", self.get_base_url(self.server_url))
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         doc = await asyncio.to_thread(self.collection.find_one, self.get_db_key())
@@ -786,7 +782,7 @@ class DBTokenStorage(TokenStorage):
                 return None
             return client_info
         except ValidationError as e:
-            logging.error(f"Could not load client info: {e}")
+            logging.error("Could not load client info: %s", e)
             return None
 
     def _serialize_client_info(self, info: dict) -> dict:
@@ -851,7 +847,7 @@ class MCPOAuthManager:
 
             return True
         except Exception as e:
-            logging.error(f"Error handling OAuth callback: {e}")
+            logging.error("Error handling OAuth callback: %s", e)
             return False
 
     def get_oauth_status(self, task_id: str) -> Dict[str, Any]:

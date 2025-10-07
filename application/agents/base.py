@@ -1,9 +1,6 @@
 import logging
 import uuid
 from abc import ABC, abstractmethod
-from typing import Dict, Generator, List, Optional
-
-from bson.objectid import ObjectId
 
 from application.agents.tools.tool_action_parser import ToolActionParser
 from application.agents.tools.tool_manager import ToolManager
@@ -13,6 +10,9 @@ from application.llm.handlers.handler_creator import LLMHandlerCreator
 from application.llm.llm_creator import LLMCreator
 from application.logging import build_stack_data, log_activity, LogContext
 from application.retriever.base import BaseRetriever
+
+from bson.objectid import ObjectId
+from typing import Any, Generator, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -272,21 +272,17 @@ class BaseAgent(ABC):
     ) -> List[Dict]:
         docs_with_filenames = []
         for doc in retrieved_data:
-            filename = doc.get("filename") or doc.get("title") or doc.get("source")
-            if filename:
-                chunk_header = str(filename)
-                docs_with_filenames.append(f"{chunk_header}\n{doc['text']}")
-            else:
-                docs_with_filenames.append(doc["text"])
+            chunk_header = doc.get("filename") or doc.get("title") or doc.get("source")
+            docs_with_filenames.append(f"{chunk_header}\n{doc['text']}")
         docs_together = "\n\n".join(docs_with_filenames)
         p_chat_combine = system_prompt.replace("{summaries}", docs_together)
         messages_combine = [{"role": "system", "content": p_chat_combine}]
 
         for i in self.chat_history:
-            if "prompt" in i and "response" in i:
+            if i.get("prompt") and i.get("response"):
                 messages_combine.append({"role": "user", "content": i["prompt"]})
                 messages_combine.append({"role": "assistant", "content": i["response"]})
-            if "tool_calls" in i:
+            if i.get("tool_calls"):
                 for tool_call in i["tool_calls"]:
                     call_id = tool_call.get("call_id") or str(uuid.uuid4())
 
@@ -319,14 +315,14 @@ class BaseAgent(ABC):
         retriever: BaseRetriever,
         query: str,
         log_context: Optional[LogContext] = None,
-    ) -> List[Dict]:
+    ) -> list[dict]:
         retrieved_data = retriever.search(query)
         if log_context:
             data = build_stack_data(retriever, exclude_attributes=["llm"])
             log_context.stacks.append({"component": "retriever", "data": data})
         return retrieved_data
 
-    def _llm_gen(self, messages: List[Dict], log_context: Optional[LogContext] = None):
+    def _llm_gen(self, messages: list[dict], log_context: Optional[LogContext] = None):
         gen_kwargs = {"model": self.gpt_model, "messages": messages}
 
         if (
@@ -360,10 +356,10 @@ class BaseAgent(ABC):
     def _llm_handler(
         self,
         resp,
-        tools_dict: Dict,
-        messages: List[Dict],
+        tools_dict: dict,
+        messages: list[dict],
         log_context: Optional[LogContext] = None,
-        attachments: Optional[List[Dict]] = None,
+        attachments: Optional[list[dict]] = None,
     ):
         resp = self.llm_handler.process_message_flow(
             self, resp, tools_dict, messages, attachments, True
@@ -387,8 +383,8 @@ class BaseAgent(ABC):
                 answer_data["schema"] = self.json_schema
             yield answer_data
             return
-        if hasattr(response, "message") and getattr(response.message, "content", None):
-            answer_data = {"answer": response.message.content}
+        if isinstance(response, dict) and response.get("message") and response.get("message", {}).get("content"):
+            answer_data = {"answer": response["message"]["content"]}
             if is_structured_output:
                 answer_data["structured"] = True
                 answer_data["schema"] = self.json_schema
@@ -405,8 +401,8 @@ class BaseAgent(ABC):
                     answer_data["structured"] = True
                     answer_data["schema"] = self.json_schema
                 yield answer_data
-            elif hasattr(event, "message") and getattr(event.message, "content", None):
-                answer_data = {"answer": event.message.content}
+            elif isinstance(event, dict) and event.get("message") and event.get("message", {}).get("content"):
+                answer_data = {"answer": event["message"]["content"]}
                 if is_structured_output:
                     answer_data["structured"] = True
                     answer_data["schema"] = self.json_schema

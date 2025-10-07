@@ -1,9 +1,9 @@
-import os
-import logging
-from retry import retry
-from tqdm import tqdm
 from application.core.settings import settings
 from application.vectorstore.vector_creator import VectorCreator
+from retry import retry
+from tqdm import tqdm
+import logging
+import os
 
 
 def sanitize_content(content: str) -> str:
@@ -37,7 +37,7 @@ def add_text_to_store_with_retry(store, doc, source_id):
         doc.metadata["source_id"] = str(source_id)
         store.add_texts([doc.page_content], metadatas=[doc.metadata])
     except Exception as e:
-        logging.error(f"Failed to add document with retry: {e}", exc_info=True)
+        logger.error("Failed to add document with retry", exc_info=True)
         raise
 
 
@@ -93,8 +93,8 @@ def embed_and_store_documents(docs, folder_name, source_id, task_status):
             # Add document to vector store
             add_text_to_store_with_retry(store, doc, source_id)
         except Exception as e:
-            logging.error(f"Error embedding document {idx}: {e}", exc_info=True)
-            logging.info(f"Saving progress at document {idx} out of {total_docs}")
+            logger.error("Error embedding document", exc_info=True)
+            logger.info(f"Saving progress at document {idx} out of {total_docs}")
             store.save_local(folder_name)
             break
 

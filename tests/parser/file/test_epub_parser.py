@@ -1,8 +1,10 @@
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
 import sys
 import types
+
+from pathlib import Path
+from unittest.mock import patch, MagicMock
+
+import pytest
 
 from application.parser.file.epub_parser import EpubParser
 
@@ -106,11 +108,11 @@ def test_epub_parser_empty_book(epub_parser):
     
     fake_epub.read_epub = MagicMock(return_value=mock_book)
     fake_html2text.html2text = MagicMock()
-    
+
     with patch.dict(sys.modules, {
         "ebooklib": fake_ebooklib,
         "ebooklib.epub": fake_epub,
-        "html2text": fake_html2text
+        "html2text": fake_html2text,
     }):
         result = epub_parser.parse_file(Path("empty.epub"))
     assert result == ""
@@ -139,11 +141,11 @@ def test_epub_parser_non_document_items_ignored(epub_parser):
     
     fake_epub.read_epub = MagicMock(return_value=mock_book)
     fake_html2text.html2text = MagicMock(return_value="Document content\n")
-    
+
     with patch.dict(sys.modules, {
         "ebooklib": fake_ebooklib,
         "ebooklib.epub": fake_epub,
-        "html2text": fake_html2text
+        "html2text": fake_html2text,
     }):
         result = epub_parser.parse_file(Path("test.epub"))
     

@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock, patch
 from urllib.parse import urlparse
 
 from application.parser.remote.web_loader import WebLoader, headers

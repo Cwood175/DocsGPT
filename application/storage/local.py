@@ -1,9 +1,10 @@
 """Local file system implementation."""
 import os
 import shutil
-from typing import BinaryIO, List, Callable
 
 from application.storage.base import BaseStorage
+
+from typing import BinaryIO, Callable
 
 
 class LocalStorage(BaseStorage):

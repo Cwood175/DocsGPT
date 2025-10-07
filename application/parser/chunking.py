@@ -1,8 +1,10 @@
-import re
-from typing import List, Tuple
 import logging
+import re
+
 from application.parser.schema.base import Document
 from application.utils import get_encoding
+
+from typing import list, tuple
 
 logger = logging.getLogger(__name__)
 
@@ -22,14 +24,11 @@ class Chunker:
         self.duplicate_headers = duplicate_headers
         self.encoding = get_encoding()
 
-    def separate_header_and_body(self, text: str) -> Tuple[str, str]:
+    def separate_header_and_body(self, text: str) -> tuple[str, str]:
         header_pattern = r"^(.*?\n){3}"
         match = re.match(header_pattern, text)
-        if match:
-            header = match.group(0)
-            body = text[len(header):]
-        else:
-            header, body = "", text  # No header, treat entire text as body
+        header = match.group(0) if match else ""
+        body = text[len(header):] if match else text
         return header, body
 
 

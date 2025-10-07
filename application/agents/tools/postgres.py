@@ -1,5 +1,6 @@
-import psycopg2
 from application.agents.tools.base import Tool
+
+import psycopg2
 
 class PostgresTool(Tool):
     """
@@ -68,7 +69,7 @@ class PostgresTool(Tool):
         """
         Retrieves the schema of the PostgreSQL database using a connection string.
         """
-        conn = None # Initialize conn to None for error handling
+        conn = None  # Initialize conn to None for error handling
         try:
             conn = psycopg2.connect(self.connection_string)
             cur = conn.cursor()
@@ -117,7 +118,7 @@ class PostgresTool(Tool):
                 "error": error_message,
             }
         finally:
-            if conn: # Ensure connection is closed even if errors occur
+            if conn:  # Ensure connection is closed even if errors occur
                 conn.close()
 
     def get_actions_metadata(self):

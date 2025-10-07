@@ -1,6 +1,6 @@
 """Conversation management routes."""
 
-import datetime
+from datetime import datetime
 
 from bson.objectid import ObjectId
 from flask import current_app, jsonify, make_response, request
@@ -35,9 +35,7 @@ class DeleteConversation(Resource):
                 {"_id": ObjectId(conversation_id), "user": decoded_token["sub"]}
             )
         except Exception as err:
-            current_app.logger.error(
-                f"Error deleting conversation: {err}", exc_info=True
-            )
+            current_app.logger.exception(f"Error deleting conversation: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -55,9 +53,7 @@ class DeleteAllConversations(Resource):
         try:
             conversations_collection.delete_many({"user": user_id})
         except Exception as err:
-            current_app.logger.error(
-                f"Error deleting all conversations: {err}", exc_info=True
-            )
+            current_app.logger.exception(f"Error deleting all conversations: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -97,9 +93,7 @@ class GetConversations(Resource):
                 for conversation in conversations
             ]
         except Exception as err:
-            current_app.logger.error(
-                f"Error retrieving conversations: {err}", exc_info=True
-            )
+            current_app.logger.exception(f"Error retrieving conversations: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify(list_conversations), 200)
 
@@ -146,15 +140,12 @@ class GetSingleConversation(Resource):
                                     }
                                 )
                         except Exception as e:
-                            current_app.logger.error(
-                                f"Error retrieving attachment {attachment_id}: {e}",
-                                exc_info=True,
+                            current_app.logger.exception(
+                                f"Error retrieving attachment {attachment_id}: {e}"
                             )
                     query["attachments"] = attachment_details
         except Exception as err:
-            current_app.logger.error(
-                f"Error retrieving conversation: {err}", exc_info=True
-            )
+            current_app.logger.exception(f"Error retrieving conversation: {err}")
             return make_response(jsonify({"success": False}), 400)
         data = {
             "queries": queries,
@@ -196,9 +187,7 @@ class UpdateConversationName(Resource):
                 {"$set": {"name": data["name"]}},
             )
         except Exception as err:
-            current_app.logger.error(
-                f"Error updating conversation name: {err}", exc_info=True
-            )
+            current_app.logger.exception(f"Error updating conversation name: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 

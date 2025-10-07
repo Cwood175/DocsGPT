@@ -1,12 +1,12 @@
 """Source document management chunk management."""
 
-from bson.objectid import ObjectId
-from flask import current_app, jsonify, make_response, request
-from flask_restx import fields, Namespace, Resource
-
 from application.api import api
 from application.api.user.base import get_vector_store, sources_collection
 from application.utils import check_required_fields, num_tokens_from_string
+
+from bson.objectid import ObjectId
+from flask import current_app, jsonify, make_response, request
+from flask_restx import fields, Namespace, Resource
 
 sources_chunks_ns = Namespace(
     "sources", description="Source document management operations", path="/api"
@@ -138,11 +138,11 @@ class AddChunk(Resource):
             store = get_vector_store(doc_id)
             chunk_id = store.add_chunk(text, metadata)
             return make_response(
-                jsonify({"message": "Chunk added successfully", "chunk_id": chunk_id}),
+                jsonify({"message": "chunk added successfully", "chunk_id": chunk_id}),
                 201,
             )
         except Exception as e:
-            current_app.logger.error(f"Error adding chunk: {e}", exc_info=True)
+            current_app.logger.exception(f"Error adding chunk: {e}")
             return make_response(jsonify({"success": False}), 500)
 
 
@@ -224,8 +224,7 @@ class UpdateChunk(Resource):
 
         if text is not None:
             token_count = num_tokens_from_string(text)
-            if metadata is None:
-                metadata = {}
+            metadata = metadata or {}
             metadata["token_count"] = token_count
         if not ObjectId.is_valid(doc_id):
             return make_response(jsonify({"error": "Invalid doc_id"}), 400)
@@ -243,11 +242,9 @@ class UpdateChunk(Resource):
                 return make_response(jsonify({"error": "Chunk not found"}), 404)
             new_text = text if text is not None else existing_chunk["text"]
 
+            new_metadata = (existing_chunk["metadata"].copy())
             if metadata is not None:
-                new_metadata = existing_chunk["metadata"].copy()
                 new_metadata.update(metadata)
-            else:
-                new_metadata = existing_chunk["metadata"].copy()
             if text is not None:
                 new_metadata["token_count"] = num_tokens_from_string(new_text)
             try:
@@ -261,7 +258,7 @@ class UpdateChunk(Resource):
                 return make_response(
                     jsonify(
                         {
-                            "message": "Chunk updated successfully",
+                            "message": "chunk updated successfully",
                             "chunk_id": new_chunk_id,
                             "original_chunk_id": chunk_id,
                         }
@@ -269,10 +266,10 @@ class UpdateChunk(Resource):
                     200,
                 )
             except Exception as add_error:
-                current_app.logger.error(f"Failed to add updated chunk: {add_error}")
+                current_app.logger.exception(f"Failed to add updated chunk: {add_error}")
                 return make_response(
                     jsonify({"error": "Failed to update chunk - addition failed"}), 500
                 )
         except Exception as e:
-            current_app.logger.error(f"Error updating chunk: {e}", exc_info=True)
+            current_app.logger.exception(f"Error updating chunk: {e}")
             return make_response(jsonify({"success": False}), 500)

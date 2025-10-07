@@ -2,11 +2,10 @@
 
 import io
 import os
-from typing import BinaryIO, Callable, List
+from typing import BinaryIO, Callable
 
 import boto3
 from application.core.settings import settings
-
 from application.storage.base import BaseStorage
 from botocore.exceptions import ClientError
 
@@ -73,7 +72,8 @@ class S3Storage(BaseStorage):
         try:
             self.s3.delete_object(Bucket=self.bucket_name, Key=path)
             return True
-        except ClientError:
+        except ClientError as e:
+            logging.error(f"Error deleting S3 file {path}: {e}", exc_info=True)
             return False
 
     def file_exists(self, path: str) -> bool:
@@ -128,7 +128,8 @@ class S3Storage(BaseStorage):
 
                 return processor_func(local_path=temp_file.name, **kwargs)
             except Exception as e:
-                logging.error(f"Error processing S3 file {path}: {e}", exc_info=True)
+                logger = logging.getLogger(__name__)
+                logger.error(f"Error processing S3 file {path}: {e}", exc_info=True)
                 raise
 
     def is_directory(self, path: str) -> bool:

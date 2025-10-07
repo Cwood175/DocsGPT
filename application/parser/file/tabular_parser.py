@@ -4,9 +4,9 @@ Contains parsers for tabular data files.
 
 """
 from pathlib import Path
-from typing import Any, Dict, List, Union
 
 from application.parser.file.base_parser import BaseParser
+from typing import Any, Dict, List, Union
 
 
 class CSVParser(BaseParser):
@@ -88,7 +88,7 @@ class PandasCSVParser(BaseParser):
             concat_rows: bool = True,
             col_joiner: str = ", ",
             row_joiner: str = "\n",
-            pandas_config: dict = {},
+            pandas_config: dict | None = None,
             header_period: int = 20,
             header_prefix: str = "HEADERS: ",
             **kwargs: Any
@@ -98,15 +98,15 @@ class PandasCSVParser(BaseParser):
         self._concat_rows = concat_rows
         self._col_joiner = col_joiner
         self._row_joiner = row_joiner
-        self._pandas_config = pandas_config
+        self._pandas_config = pandas_config if pandas_config is not None else {}
         self._header_period = header_period
         self._header_prefix = header_prefix
 
-    def _init_parser(self) -> Dict:
+    def _init_parser(self) -> dict:
         """Init parser."""
         return {}
 
-    def parse_file(self, file: Path, errors: str = "ignore") -> Union[str, List[str]]:
+    def parse_file(self, file: Path, errors: str = "ignore") -> str | list[str]:
         """Parse file."""
         try:
             import pandas as pd

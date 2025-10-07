@@ -15,20 +15,12 @@ from flask import (
 from flask_restx import fields, Namespace, Resource
 
 
-from application.api.user.tasks import (
-    ingest_connector_task,
-)
+from application.api import api
+from application.api.user.tasks import ingest_connector_task
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
-from application.api import api
-
-
-from application.utils import (
-    check_required_fields
-)
-
-
 from application.parser.connectors.connector_creator import ConnectorCreator
+from application.utils import check_required_fields
 
 
 
@@ -124,7 +116,7 @@ class UploadConnector(Resource):
                 loader=data["source"],
                 sync_frequency=sync_frequency
             )
-        except Exception as err:
+        except (ValueError, TypeError) as err:
             current_app.logger.error(
                 f"Error uploading connector source: {err}", exc_info=True
             )
@@ -158,7 +150,7 @@ class ConnectorTaskStatus(Resource):
             ):
                 task_meta = str(task_meta)
         except Exception as err:
-            current_app.logger.error(f"Error getting task status: {err}", exc_info=True)
+            current_app.logger.error(f"Error getting task status: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"status": task.status, "result": task_meta}), 200)
 
@@ -215,9 +207,7 @@ class DeleteConnectorSource(Resource):
                     jsonify({"success": False, "message": "Source not found"}), 404
                 )
         except Exception as err:
-            current_app.logger.error(
-                f"Error deleting connector source: {err}", exc_info=True
-            )
+            current_app.logger.error(f"Error deleting connector source: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -617,10 +607,7 @@ class ConnectorSync(Resource):
             )
 
         except Exception as err:
-            current_app.logger.error(
-                f"Error syncing connector source: {err}",
-                exc_info=True
-            )
+            current_app.logger.error(f"Error syncing connector source: {err}")
             return make_response(
                 jsonify({
                     "success": False,

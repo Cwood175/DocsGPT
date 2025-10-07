@@ -1,5 +1,6 @@
-import logging
 from abc import ABC, abstractmethod
+
+import logging
 
 from application.cache import gen_cache, stream_cache
 
@@ -40,7 +41,7 @@ class BaseLLM(ABC):
                 )
             except Exception as e:
                 logger.error(
-                    f"Failed to initialize fallback LLM: {str(e)}", exc_info=True
+                    f"Failed to initialize fallback LLM: {str(e)}"
                 )
         return self._fallback_llm
 

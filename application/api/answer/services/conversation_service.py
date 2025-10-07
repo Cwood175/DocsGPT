@@ -1,9 +1,8 @@
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 from application.core.mongo_db import MongoDB
-
 from application.core.settings import settings
 from bson import ObjectId
 
@@ -65,7 +64,7 @@ class ConversationService:
         user_id = decoded_token.get("sub")
         if not user_id:
             raise ValueError("User ID not found in token")
-        current_time = datetime.now(timezone.utc)
+        current_time = datetime.now(tz=timezone.utc)
         
         # clean up in sources array such that we save max 1k characters for text part
         for source in sources:

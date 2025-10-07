@@ -1,14 +1,14 @@
 """Tool management routes."""
 
-from bson.objectid import ObjectId
-from flask import current_app, jsonify, make_response, request
-from flask_restx import fields, Namespace, Resource
-
 from application.agents.tools.tool_manager import ToolManager
 from application.api import api
 from application.api.user.base import user_tools_collection
 from application.security.encryption import decrypt_credentials, encrypt_credentials
 from application.utils import check_required_fields, validate_function_name
+
+from bson.objectid import ObjectId
+from flask import current_app, jsonify, make_response, request
+from flask_restx import fields, Namespace, Resource
 
 tool_config = {}
 tool_manager = ToolManager(config=tool_config)
@@ -37,9 +37,7 @@ class AvailableTools(Resource):
                     }
                 )
         except Exception as err:
-            current_app.logger.error(
-                f"Error getting available tools: {err}", exc_info=True
-            )
+            current_app.logger.error("Error getting available tools: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True, "data": tools_metadata}), 200)
 
@@ -126,9 +124,7 @@ class CreateTool(Resource):
                             param_details["value"] = ""
                 transformed_actions.append(action)
         except Exception as err:
-            current_app.logger.error(
-                f"Error getting tool actions: {err}", exc_info=True
-            )
+            current_app.logger.error("Error getting tool actions: %s", err)
             return make_response(jsonify({"success": False}), 400)
         try:
             new_tool = {
@@ -144,7 +140,7 @@ class CreateTool(Resource):
             resp = user_tools_collection.insert_one(new_tool)
             new_id = str(resp.inserted_id)
         except Exception as err:
-            current_app.logger.error(f"Error creating tool: {err}", exc_info=True)
+            current_app.logger.error("Error creating tool: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"id": new_id}), 200)
 
@@ -266,7 +262,7 @@ class UpdateTool(Resource):
                 {"$set": update_data},
             )
         except Exception as err:
-            current_app.logger.error(f"Error updating tool: {err}", exc_info=True)
+            current_app.logger.error("Error updating tool: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -301,9 +297,7 @@ class UpdateToolConfig(Resource):
                 {"$set": {"config": data["config"]}},
             )
         except Exception as err:
-            current_app.logger.error(
-                f"Error updating tool config: {err}", exc_info=True
-            )
+            current_app.logger.error("Error updating tool config: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -340,9 +334,7 @@ class UpdateToolActions(Resource):
                 {"$set": {"actions": data["actions"]}},
             )
         except Exception as err:
-            current_app.logger.error(
-                f"Error updating tool actions: {err}", exc_info=True
-            )
+            current_app.logger.error("Error updating tool actions: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -377,9 +369,7 @@ class UpdateToolStatus(Resource):
                 {"$set": {"status": data["status"]}},
             )
         except Exception as err:
-            current_app.logger.error(
-                f"Error updating tool status: {err}", exc_info=True
-            )
+            current_app.logger.error("Error updating tool status: %s", err)
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -410,6 +400,6 @@ class DeleteTool(Resource):
             if result.deleted_count == 0:
                 return {"success": False, "message": "Tool not found"}, 404
         except Exception as err:
-            current_app.logger.error(f"Error deleting tool: {err}", exc_info=True)
+            current_app.logger.error("Error deleting tool: %s", err)
             return {"success": False}, 400
         return {"success": True}, 200

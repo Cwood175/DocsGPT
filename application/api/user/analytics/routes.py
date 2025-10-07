@@ -1,6 +1,6 @@
 """Analytics and reporting routes."""
 
-import datetime
+from datetime import datetime
 
 from bson.objectid import ObjectId
 from flask import current_app, jsonify, make_response, request
@@ -63,7 +63,7 @@ class GetMessageAnalytics(Resource):
                 else None
             )
         except Exception as err:
-            current_app.logger.error(f"Error getting API key: {err}", exc_info=True)
+            current_app.logger.exception("Error getting API key")
             return make_response(jsonify({"success": False}), 400)
         end_date = datetime.datetime.now(datetime.timezone.utc)
 
@@ -133,9 +133,7 @@ class GetMessageAnalytics(Resource):
             for entry in message_data:
                 daily_messages[entry["_id"]] = entry["count"]
         except Exception as err:
-            current_app.logger.error(
-                f"Error getting message analytics: {err}", exc_info=True
-            )
+            current_app.logger.exception("Error getting message analytics")
             return make_response(jsonify({"success": False}), 400)
         return make_response(
             jsonify({"success": True, "messages": daily_messages}), 200
@@ -288,9 +286,7 @@ class GetTokenAnalytics(Resource):
                 else:
                     daily_token_usage[entry["_id"]["day"]] = entry["total_tokens"]
         except Exception as err:
-            current_app.logger.error(
-                f"Error getting token analytics: {err}", exc_info=True
-            )
+            current_app.logger.exception("Error getting token analytics")
             return make_response(jsonify({"success": False}), 400)
         return make_response(
             jsonify({"success": True, "token_usage": daily_token_usage}), 200
@@ -449,9 +445,7 @@ class GetFeedbackAnalytics(Resource):
                     "negative": entry["negative"],
                 }
         except Exception as err:
-            current_app.logger.error(
-                f"Error getting feedback analytics: {err}", exc_info=True
-            )
+            current_app.logger.exception("Error getting feedback analytics")
             return make_response(jsonify({"success": False}), 400)
         return make_response(
             jsonify({"success": True, "feedback": daily_feedback}), 200

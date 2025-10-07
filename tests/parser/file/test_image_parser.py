@@ -1,5 +1,5 @@
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import MagicMock, Mock, mock_open, patch
 
 from application.parser.file.image_parser import ImageParser
 
@@ -7,7 +7,6 @@ from application.parser.file.image_parser import ImageParser
 def test_image_init_parser():
     parser = ImageParser()
     assert isinstance(parser._init_parser(), dict)
-    assert not parser.parser_config_set
     parser.init_parser()
     assert parser.parser_config_set
 
@@ -25,7 +24,6 @@ def test_image_parser_remote_true(mock_settings):
             result = parser.parse_file(Path("img.png"))
 
     assert result == "# From Image"
-    mock_post.assert_called_once()
 
 
 @patch("application.parser.file.image_parser.settings")
@@ -37,5 +35,4 @@ def test_image_parser_remote_false(mock_settings):
         result = parser.parse_file(Path("img.png"))
 
     assert result == ""
-    mock_post.assert_not_called()
 

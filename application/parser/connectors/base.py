@@ -6,9 +6,9 @@ interface for external knowledge base connectors.
 """
 
 from abc import ABC, abstractmethod
-from typing import Any, Dict, List, Optional
 
 from application.parser.schema.base import Document
+from typing import Any, Optional
 
 
 class BaseConnectorAuth(ABC):
@@ -30,7 +30,7 @@ class BaseConnectorAuth(ABC):
         Returns:
             Authorization URL
         """
-        pass
+        raise NotImplementedError
     
     @abstractmethod
     def exchange_code_for_tokens(self, authorization_code: str) -> Dict[str, Any]:
@@ -43,7 +43,7 @@ class BaseConnectorAuth(ABC):
         Returns:
             Dictionary containing token information
         """
-        pass
+        raise NotImplementedError
     
     @abstractmethod
     def refresh_access_token(self, refresh_token: str) -> Dict[str, Any]:
@@ -56,7 +56,7 @@ class BaseConnectorAuth(ABC):
         Returns:
             Dictionary containing refreshed token information
         """
-        pass
+        raise NotImplementedError
     
     @abstractmethod
     def is_token_expired(self, token_info: Dict[str, Any]) -> bool:
@@ -69,7 +69,7 @@ class BaseConnectorAuth(ABC):
         Returns:
             True if token is expired, False otherwise
         """
-        pass
+        raise NotImplementedError
 
 
 class BaseConnectorLoader(ABC):

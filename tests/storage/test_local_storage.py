@@ -3,7 +3,7 @@
 
 import io
 import pytest
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import MagicMock, mock_open, patch
 
 from application.storage.local import LocalStorage
 
@@ -253,7 +253,6 @@ class TestLocalStorageProcessFile:
 class TestLocalStorageIsDirectory:
     """Test directory checking functionality."""
 
-    @patch('os.path.isdir', return_value=True)
     def test_is_directory_returns_true_when_directory_exists(
         self, mock_isdir, local_storage
     ):
@@ -263,6 +262,7 @@ class TestLocalStorageIsDirectory:
         result = local_storage.is_directory(path)
 
         assert result is True
+        mock_isdir.assert_called_once_with("/tmp/test_storage/documents")
         mock_isdir.assert_called_once_with("/tmp/test_storage/documents")
 
     @patch('os.path.isdir', return_value=False)
@@ -281,15 +281,22 @@ class TestLocalStorageIsDirectory:
 class TestLocalStorageRemoveDirectory:
     """Test directory removal functionality."""
 
-    @patch('shutil.rmtree')
-    @patch('os.path.isdir', return_value=True)
-    @patch('os.path.exists', return_value=True)
     def test_remove_directory_deletes_directory(
         self, mock_exists, mock_isdir, mock_rmtree, local_storage
     ):
         """Should remove directory and return True when successful."""
         directory = "documents"
 
+        result = local_storage.remove_directory(directory)
+
+        assert result is True
+        mock_exists.assert_called_once_with("/tmp/test_storage/documents")
+        mock_isdir.assert_called_once_with("/tmp/test_storage/documents")
+        mock_rmtree.assert_called_once_with("/tmp/test_storage/documents")
+
+    @patch('shutil.rmtree')
+    @patch('os.path.isdir', return_value=True)
+    @patch('os.path.exists', return_value=True)
         result = local_storage.remove_directory(directory)
 
         assert result is True
@@ -323,15 +330,22 @@ class TestLocalStorageRemoveDirectory:
         mock_exists.assert_called_once_with("/tmp/test_storage/documents/test.txt")
         mock_isdir.assert_called_once_with("/tmp/test_storage/documents/test.txt")
 
-    @patch('shutil.rmtree', side_effect=OSError("Permission denied"))
-    @patch('os.path.isdir', return_value=True)
-    @patch('os.path.exists', return_value=True)
     def test_remove_directory_returns_false_on_os_error(
         self, mock_exists, mock_isdir, mock_rmtree, local_storage
     ):
         """Should return False when OSError occurs during removal."""
         directory = "documents"
 
+        result = local_storage.remove_directory(directory)
+
+        assert result is False
+        mock_exists.assert_called_once_with("/tmp/test_storage/documents")
+        mock_isdir.assert_called_once_with("/tmp/test_storage/documents")
+        mock_rmtree.assert_called_once_with("/tmp/test_storage/documents")
+
+    @patch('shutil.rmtree', side_effect=OSError("Permission denied"))
+    @patch('os.path.isdir', return_value=True)
+    @patch('os.path.exists', return_value=True)
         result = local_storage.remove_directory(directory)
 
         assert result is False

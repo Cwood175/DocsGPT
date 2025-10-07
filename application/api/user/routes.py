@@ -6,7 +6,6 @@ from flask import Blueprint
 
 from application.api import api
 from .agents import agents_ns, agents_sharing_ns, agents_webhooks_ns
-
 from .analytics import analytics_ns
 from .attachments import attachments_ns
 from .conversations import conversations_ns

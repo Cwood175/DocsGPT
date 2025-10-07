@@ -1,47 +1,48 @@
-from typing import List, Optional
 import importlib
-from application.vectorstore.base import BaseVectorStore
+from typing import List, Optional
+
 from application.core.settings import settings
+from application.vectorstore.base import BaseVectorStore
 
 class LanceDBVectorStore(BaseVectorStore):
     """Class for LanceDB Vector Store integration."""
 
     def __init__(self, path: str = settings.LANCEDB_PATH,
                  table_name_prefix: str = settings.LANCEDB_TABLE_NAME,
-                 source_id: str = None,
+                 source_id: str | None = None,
                  embeddings_key: str = "embeddings"):
         """Initialize the LanceDB vector store."""
         super().__init__()
         self.path = path
         self.table_name = f"{table_name_prefix}_{source_id}" if source_id else table_name_prefix
         self.embeddings_key = embeddings_key
-        self._lance_db = None
-        self.docsearch = None
-        self._pa = None  # PyArrow (pa) will be lazy loaded
+        self._lance_db: lance_db.LanceDB | None = None
+        self.docsearch: lance_db.LanceDB | None = None
+        self._pa: pa.ArrowPyExtensionType | None = None  # PyArrow (pa) will be lazy loaded
 
     @property
-    def pa(self):
+    def pa(self) -> pa.ArrowPyExtensionType | None:
         """Lazy load pyarrow module."""
         if self._pa is None:
             self._pa = importlib.import_module("pyarrow")
         return self._pa
 
     @property
-    def lancedb(self):
+    def lancedb(self) -> lancedb.LanceDB | None:
         """Lazy load lancedb module."""
         if not hasattr(self, "_lancedb_module"):
             self._lancedb_module = importlib.import_module("lancedb")
         return self._lancedb_module
 
     @property
-    def lance_db(self):
+    def lance_db(self) -> lancedb.LanceDB | None:
         """Lazy load the LanceDB connection."""
         if self._lance_db is None:
             self._lance_db = self.lancedb.connect(self.path)
         return self._lance_db
 
     @property
-    def table(self):
+    def table(self) -> lance_db.LanceDB | None:
         """Lazy load the LanceDB table."""
         if self.docsearch is None:
             if self.table_name in self.lance_db.table_names():
@@ -64,7 +65,7 @@ class LanceDBVectorStore(BaseVectorStore):
             ])
             self.docsearch = self.lance_db.create_table(self.table_name, schema=schema)
 
-    def add_texts(self, texts: List[str], metadatas: Optional[List[dict]] = None, source_id: str = None):
+    def add_texts(self, texts: list[str], metadatas: list[dict] | None = None, source_id: str | None = None):
         """Add texts with metadata and their embeddings to the LanceDB table."""
         embeddings = self._get_embeddings(settings.EMBEDDINGS_NAME, self.embeddings_key).embed_documents(texts)
         vectors = []
@@ -103,7 +104,7 @@ class LanceDBVectorStore(BaseVectorStore):
                     f"!= table index dimension ({table_index_dimension})"
                 )
 
-    def filter_documents(self, filter_condition: dict) -> List[dict]:
+    def filter_documents(self, filter_condition: dict) -> list[dict]:
         """Filter documents based on certain conditions."""
         self.ensure_table_exists()
 

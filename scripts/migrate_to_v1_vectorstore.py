@@ -1,7 +1,8 @@
-import pymongo
+import logging
 import os
 import shutil
-import logging
+
+import pymongo
 from tqdm import tqdm
 
 # Configure logging
@@ -14,7 +15,7 @@ MONGO_ATLAS_URI = "mongodb+srv://<username>:<password>@<cluster>/<dbname>?retryW
 DB_NAME = "docsgpt"
 
 def backup_collection(collection, backup_collection_name):
-    logger.info(f"Backing up collection {collection.name} to {backup_collection_name}")
+    logger.info(f"Backing up collection {str(collection.name)} to {backup_collection_name}")
     collection.aggregate([{"$out": backup_collection_name}])
     logger.info("Backup completed")
 

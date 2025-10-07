@@ -1,14 +1,13 @@
 import logging
 import os
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Union
 
 import yaml
-from bson import ObjectId
-from bson.dbref import DBRef
-
+from bson import DBRef, ObjectId
 from dotenv import load_dotenv
 from pymongo import MongoClient
+
+from typing import Union
 
 from application.agents.tools.tool_manager import ToolManager
 from application.api.user.tasks import ingest_remote
@@ -28,7 +27,7 @@ class DatabaseSeeder:
         self.system_user_id = "system"
         self.logger = logging.getLogger(__name__)
 
-    def seed_initial_data(self, config_path: str = None, force=False):
+    def seed_initial_data(self, config_path: str | None = None, force: bool = False):
         """Main entry point for seeding all initial data"""
         if not force and self._is_already_seeded():
             self.logger.info("Database already seeded. Use force=True to reseed.")

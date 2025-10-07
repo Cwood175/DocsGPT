@@ -1,7 +1,7 @@
 import base64
 import pytest
-from unittest.mock import patch, MagicMock
 import requests
+from unittest.mock import patch, MagicMock
 
 from application.parser.remote.github_loader import GitHubLoader
 

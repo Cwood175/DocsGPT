@@ -1,8 +1,9 @@
-import logging
 from application.parser.remote.base import BaseRemote
 from application.parser.schema.base import Document
 from langchain_community.document_loaders import WebBaseLoader
 from urllib.parse import urlparse
+
+import logging
 
 headers = {
     "User-Agent": "Mozilla/5.0",

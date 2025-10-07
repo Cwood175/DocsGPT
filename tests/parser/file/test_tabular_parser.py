@@ -1,6 +1,6 @@
 import pytest
 from pathlib import Path
-from unittest.mock import patch, MagicMock, mock_open
+from unittest.mock import MagicMock, mock_open, patch
 
 from application.parser.file.tabular_parser import CSVParser, PandasCSVParser, ExcelParser
 
@@ -19,24 +19,24 @@ def pandas_csv_parser():
 def excel_parser():
     return ExcelParser()
 
-def test_csv_init_parser():
-    parser = CSVParser()
+def test_csv_init_parser(csv_parser):
+    parser = csv_parser
     assert isinstance(parser._init_parser(), dict)
     assert not parser.parser_config_set
     parser.init_parser()
     assert parser.parser_config_set
 
 
-def test_pandas_csv_init_parser():
-    parser = PandasCSVParser()
+def test_pandas_csv_init_parser(pandas_csv_parser):
+    parser = pandas_csv_parser
     assert isinstance(parser._init_parser(), dict)
     assert not parser.parser_config_set
     parser.init_parser()
     assert parser.parser_config_set
 
 
-def test_excel_init_parser():
-    parser = ExcelParser()
+def test_excel_init_parser(excel_parser):
+    parser = excel_parser
     assert isinstance(parser._init_parser(), dict)
     assert not parser.parser_config_set
     parser.init_parser()
@@ -48,7 +48,7 @@ def test_csv_parser_concat_rows(csv_parser):
 
     with patch("builtins.open", mock_open(read_data=mock_data)):
         result = csv_parser.parse_file(Path("test.csv"))
-        assert result == "col1, col2\nvalue1, value2\nvalue3, value4"
+    assert result == "col1, col2\nvalue1, value2\nvalue3, value4"
 
 
 def test_csv_parser_separate_rows(csv_parser):
@@ -57,7 +57,7 @@ def test_csv_parser_separate_rows(csv_parser):
 
     with patch("builtins.open", mock_open(read_data=mock_data)):
         result = csv_parser.parse_file(Path("test.csv"))
-        assert result == ["col1, col2", "value1, value2", "value3, value4"]
+    assert result == ["col1, col2", "value1, value2", "value3, value4"]
 
 
 
@@ -72,8 +72,8 @@ def test_pandas_csv_parser_concat_rows(pandas_csv_parser):
 
     with patch("pandas.read_csv", return_value=mock_df):
         result = pandas_csv_parser.parse_file(Path("test.csv"))
-        expected = "HEADERS: col1, col2\nvalue1, value2\nvalue3, value4"
-        assert result == expected
+    expected = "HEADERS: col1, col2\nvalue1, value2\nvalue3, value4"
+    assert result == expected
 
 
 def test_pandas_csv_parser_separate_rows(pandas_csv_parser):
@@ -83,7 +83,7 @@ def test_pandas_csv_parser_separate_rows(pandas_csv_parser):
 
     with patch("pandas.read_csv", return_value=mock_df):
         result = pandas_csv_parser.parse_file(Path("test.csv"))
-        assert result == ["value1, value2", "value3, value4"]
+    assert result == ["value1, value2", "value3, value4"]
 
 
 def test_pandas_csv_parser_header_period(pandas_csv_parser):
@@ -114,8 +114,8 @@ def test_excel_parser_concat_rows(excel_parser):
 
     with patch("pandas.read_excel", return_value=mock_df):
         result = excel_parser.parse_file(Path("test.xlsx"))
-        expected = "HEADERS: col1, col2\nvalue1, value2\nvalue3, value4"
-        assert result == expected
+    expected = "HEADERS: col1, col2\nvalue1, value2\nvalue3, value4"
+    assert result == expected
 
 
 def test_excel_parser_separate_rows(excel_parser):
@@ -125,7 +125,7 @@ def test_excel_parser_separate_rows(excel_parser):
 
     with patch("pandas.read_excel", return_value=mock_df):
         result = excel_parser.parse_file(Path("test.xlsx"))
-        assert result == ["value1, value2", "value3, value4"]
+    assert result == ["value1, value2", "value3, value4"]
 
 
 def test_excel_parser_header_period(excel_parser):
@@ -141,8 +141,8 @@ def test_excel_parser_header_period(excel_parser):
 
     with patch("pandas.read_excel", return_value=mock_df):
         result = excel_parser.parse_file(Path("test.xlsx"))
-        expected = "value1, value2\nHEADERS: col1, col2\nvalue3, value4"
-        assert result == expected
+    expected = "value1, value2\nHEADERS: col1, col2\nvalue3, value4"
+    assert result == expected
 
 def test_csv_parser_import_error(csv_parser):
     import sys
@@ -185,7 +185,8 @@ def test_pandas_csv_parser_header_period_one(pandas_csv_parser):
     assert result == "x, y\nHEADERS: a, b\nm, n"
 
 
-def test_pandas_csv_parser_passes_pandas_config():
+def test_pandas_csv_parser_passes_pandas_config(pandas_csv_parser):
+    parser = pandas_csv_parser
     parser = PandasCSVParser(pandas_config={"sep": ";", "header": 0})
     mock_df = MagicMock()
     with patch("pandas.read_csv", return_value=mock_df) as mock_read:

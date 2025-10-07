@@ -1,4 +1,5 @@
 import pytest
+
 from application.agents.tools.notes import NotesTool
 from application.core.settings import settings
 
@@ -17,9 +18,9 @@ def notes_tool(monkeypatch) -> NotesTool:
             key = f"{user_id}:{tool_id}"
 
             # emulate single-note storage with optional upsert
-            if key not in self.docs and not upsert:
-                return type("res", (), {"modified_count": 0})
-            if key not in self.docs and upsert:
+            if key not in self.docs:
+                if not upsert:
+                    return type("res", (), {"modified_count": 0})
                 self.docs[key] = {"user_id": user_id, "tool_id": tool_id, "note": ""}
             if "$set" in u and "note" in u["$set"]:
                 self.docs[key]["note"] = u["$set"]["note"]

@@ -1,9 +1,8 @@
 """Base schema for data structures."""
 from abc import abstractmethod
 from dataclasses import dataclass
-from typing import Any, Dict, List, Optional
-
 from dataclasses_json import DataClassJsonMixin
+from typing import Any, List
 
 
 @dataclass
@@ -56,7 +55,7 @@ class BaseDocument(DataClassJsonMixin):
         return self.embedding
 
     @property
-    def extra_info_str(self) -> Optional[str]:
+    def extra_info_str(self) -> str | None:
         """Extra info string."""
         if self.extra_info is None:
             return None

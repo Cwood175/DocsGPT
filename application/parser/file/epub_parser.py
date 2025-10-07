@@ -4,7 +4,6 @@ Contains parsers for epub files.
 """
 
 from pathlib import Path
-from typing import Dict
 
 from application.parser.file.base_parser import BaseParser
 
@@ -19,6 +18,7 @@ class EpubParser(BaseParser):
     def parse_file(self, file: Path, errors: str = "ignore") -> str:
         """Parse file."""
         try:
+            import html2text
             import ebooklib
             from ebooklib import epub
         except ImportError:

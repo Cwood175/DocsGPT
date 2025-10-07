@@ -1,10 +1,11 @@
 import datetime
 import functools
 import inspect
+import uuid
 
 import logging
-import uuid
-from typing import Any, Callable, Dict, Generator, List
+
+from typing import Any, Callable
 
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
@@ -26,10 +27,10 @@ class LogContext:
 
 def build_stack_data(
     obj: Any,
-    include_attributes: List[str] = None,
-    exclude_attributes: List[str] = None,
-    custom_data: Dict = None,
-) -> Dict:
+    include_attributes: list[str] | None = None,
+    exclude_attributes: list[str] | None = None,
+    custom_data: dict | None = None,
+) -> dict:
     if obj is None:
         raise ValueError("The 'obj' parameter cannot be None")
     data = {}
@@ -61,11 +62,12 @@ def build_stack_data(
                     data[attr_name] = {k: str(v) for k, v in attr_value.items()}
         except AttributeError as e:
             logging.warning(f"AttributeError while accessing {attr_name}: {e}")
-        except AttributeError:
-            pass
     if custom_data:
         data.update(custom_data)
     return data
+
+
+logger = logging.getLogger(__name__)
 
 
 def log_activity() -> Callable:
@@ -77,12 +79,15 @@ def log_activity() -> Callable:
             endpoint = data.get("endpoint", "")
             user = data.get("user", "local")
             api_key = data.get("user_api_key", "")
-            query = kwargs.get("query", getattr(args[0], "query", ""))
+            if hasattr(args[0], "query"):
+                query = kwargs.get("query", args[0].query)
+            else:
+                query = kwargs.get("query", "")
 
             context = LogContext(endpoint, activity_id, user, api_key, query)
             kwargs["log_context"] = context
 
-            logging.info(
+            logger.info(
                 f"Starting activity: {endpoint} - {activity_id} - User: {user}"
             )
 
@@ -94,12 +99,15 @@ def log_activity() -> Callable:
     return decorator
 
 
+logger = logging.getLogger(__name__)
+
+
 def _consume_and_log(generator: Generator, context: "LogContext"):
     try:
         for item in generator:
             yield item
     except Exception as e:
-        logging.exception(f"Error in {context.endpoint} - {context.activity_id}: {e}")
+        logger.exception(f"Error in {context.endpoint} - {context.activity_id}: {e}")
         context.stacks.append({"component": "error", "data": {"message": str(e)}})
         _log_to_mongodb(
             endpoint=context.endpoint,
@@ -129,7 +137,7 @@ def _log_to_mongodb(
     user: str,
     api_key: str,
     query: str,
-    stacks: List[Dict],
+    stacks: list[dict],
     level: str,
 ) -> None:
     try:
@@ -155,7 +163,7 @@ def _log_to_mongodb(
                 log_entry[key] = value[:10000]
     
         user_logs_collection.insert_one(log_entry)
-        logging.debug(f"Logged activity to MongoDB: {activity_id}")
+        logger.debug(f"Logged activity to MongoDB: {activity_id}")
 
     except Exception as e:
-        logging.error(f"Failed to log to MongoDB: {e}", exc_info=True)
+        logger.error(f"Failed to log to MongoDB: {e}", exc_info=True)

@@ -1,6 +1,5 @@
 from datetime import datetime
 from pathlib import Path
-from typing import Any, Dict, List, Optional
 import re
 import uuid
 
@@ -15,7 +14,7 @@ class MemoryTool(Tool):
     Stores and retrieves information across conversations through a memory file directory.
     """
 
-    def __init__(self, tool_config: Optional[Dict[str, Any]] = None, user_id: Optional[str] = None) -> None:
+    def __init__(self, tool_config: dict[str, Any] | None = None, user_id: str | None = None) -> None:
         """Initialize the tool.
 
         Args:
@@ -24,7 +23,7 @@ class MemoryTool(Tool):
                            This ensures each user's tool configuration has isolated memories
             user_id: The authenticated user's id (should come from decoded_token["sub"]).
         """
-        self.user_id: Optional[str] = user_id
+        self.user_id: str | None = user_id
 
         # Get tool_id from configuration (passed from user_tools._id in production)
         # In production, tool_id is the MongoDB ObjectId string from user_tools collection
@@ -93,7 +92,7 @@ class MemoryTool(Tool):
 
         return f"Unknown action: {action_name}"
 
-    def get_actions_metadata(self) -> List[Dict[str, Any]]:
+    def get_actions_metadata(self) -> list[dict[str, Any]]:
         """Return JSON metadata describing supported actions for tool schemas."""
         return [
             {
@@ -211,7 +210,7 @@ class MemoryTool(Tool):
             },
         ]
 
-    def get_config_requirements(self) -> Dict[str, Any]:
+    def get_config_requirements(self) -> dict[str, Any]:
         """Return configuration requirements."""
         return {}
 
@@ -378,15 +377,14 @@ class MemoryTool(Tool):
             return f"Error: String '{old_str}' not found in file."
 
         # Replace the string (case-insensitive)
-        import re as regex_module
-        updated_content = regex_module.sub(regex_module.escape(old_str), new_str, current_content, flags=regex_module.IGNORECASE)
+        updated_content = re.sub(re.escape(old_str), new_str, current_content, flags=re.IGNORECASE)
 
         self.collection.update_one(
             {"user_id": self.user_id, "tool_id": self.tool_id, "path": validated_path},
             {
                 "$set": {
                     "content": updated_content,
-                    "updated_at": datetime.now()
+                    "updated_at": datetime.now(timezone.utc)
                 }
             }
         )

@@ -5,7 +5,7 @@ Contains parser for md files.
 """
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple, Union
+from typing import Any
 
 from application.parser.file.base_parser import BaseParser
 
@@ -91,7 +91,7 @@ class RstParser(BaseParser):
             ]
         return rst_tups
 
-    def chunk_by_token_count(self, text: str, max_tokens: int = 100) -> List[str]:
+    def chunk_by_token_count(self, text: str, max_tokens: int = 100) -> list[str]:
         """Chunk text by token count."""
     
         avg_token_length = 5
@@ -155,8 +155,8 @@ class RstParser(BaseParser):
         return {}
 
     def parse_tups(
-            self, filepath: Path, errors: str = "ignore",max_tokens: Optional[int] = 1000
-    ) -> List[Tuple[Optional[str], str]]:
+            self, filepath: Path, errors: str = "ignore", max_tokens: int | None = 1000
+    ) -> list[tuple[str | None, str]]:
         """Parse file into tuples."""
         with open(filepath, "r") as f:
             content = f.read()

@@ -4,7 +4,6 @@ import os
 from application.core.settings import settings
 from application.llm.llm_creator import LLMCreator
 from application.retriever.base import BaseRetriever
-
 from application.vectorstore.vector_creator import VectorCreator
 
 
@@ -37,7 +36,7 @@ class ClassicRAG(BaseRetriever):
         else:
             self.chunks = chunks
         user_identifier = user_api_key if user_api_key else "default"
-        logging.info(
+        self._logger.info(
             f"ClassicRAG initialized with chunks={self.chunks}, user_api_key={user_identifier}, "
             f"sources={'active_docs' in source and source['active_docs'] is not None}"
         )
@@ -114,7 +113,7 @@ class ClassicRAG(BaseRetriever):
             print(f"Rephrased query: {rephrased_query}")
             return rephrased_query if rephrased_query else self.original_question
         except Exception as e:
-            logging.error(f"Error rephrasing query: {e}", exc_info=True)
+            self._logger.error(f"Error rephrasing query: {e}")
             return self.original_question
 
     def _get_data(self):

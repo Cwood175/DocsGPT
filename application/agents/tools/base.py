@@ -11,7 +11,6 @@ class Tool(ABC):
         """
         Returns a list of JSON objects describing the actions supported by the tool.
         """
-        pass
 
     @abstractmethod
     def get_config_requirements(self):
