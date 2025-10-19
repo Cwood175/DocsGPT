@@ -9,7 +9,6 @@ from werkzeug.utils import secure_filename
 
 from application.core.settings import settings
 
-
 _encoding = None
 
 
@@ -42,7 +41,7 @@ def safe_filename(filename):
     # If secure_filename returns just the extension or an empty string
 
     if not safe_name or safe_name == extension.lstrip("."):
-        return f"{str(uuid.uuid4())}{extension}"
+        return f"{uuid.uuid4()!s}{extension}"
     return safe_name
 
 
@@ -51,19 +50,17 @@ def num_tokens_from_string(string: str) -> int:
     if isinstance(string, str):
         num_tokens = len(encoding.encode(string))
         return num_tokens
-    else:
-        return 0
+    return 0
 
 
 def num_tokens_from_object_or_list(thing):
     if isinstance(thing, list):
         return sum([num_tokens_from_object_or_list(x) for x in thing])
-    elif isinstance(thing, dict):
+    if isinstance(thing, dict):
         return sum([num_tokens_from_object_or_list(x) for x in thing.values()])
-    elif isinstance(thing, str):
+    if isinstance(thing, str):
         return num_tokens_from_string(thing)
-    else:
-        return 0
+    return 0
 
 
 def count_tokens_docs(docs):
@@ -116,16 +113,10 @@ def validate_required_fields(data, required_fields):
     if errors_dict:
         errors = []
         if errors_dict["missing_fields"]:
-            errors.append(
-                f"Missing required fields: {', '.join(errors_dict['missing_fields'])}"
-            )
+            errors.append(f"Missing required fields: {', '.join(errors_dict['missing_fields'])}")
         if errors_dict["empty_fields"]:
-            errors.append(
-                f"Empty values in required fields: {', '.join(errors_dict['empty_fields'])}"
-            )
-        return make_response(
-            jsonify({"success": False, "message": " | ".join(errors)}), 400
-        )
+            errors.append(f"Empty values in required fields: {', '.join(errors_dict['empty_fields'])}")
+        return make_response(jsonify({"success": False, "message": " | ".join(errors)}), 400)
     return None
 
 
@@ -139,9 +130,7 @@ def limit_chat_history(history, max_token_limit=None, gpt_model="docsgpt"):
 
     max_token_limit = (
         max_token_limit
-        if max_token_limit
-        and max_token_limit
-        < settings.LLM_TOKEN_LIMITS.get(gpt_model, settings.DEFAULT_MAX_HISTORY)
+        if max_token_limit and max_token_limit < settings.LLM_TOKEN_LIMITS.get(gpt_model, settings.DEFAULT_MAX_HISTORY)
         else settings.LLM_TOKEN_LIMITS.get(gpt_model, settings.DEFAULT_MAX_HISTORY)
     )
 
@@ -169,21 +158,16 @@ def limit_chat_history(history, max_token_limit=None, gpt_model="docsgpt"):
 
 def validate_function_name(function_name):
     """Validate function name matches allowed pattern (alphanumeric, underscore, hyphen)."""
-    if not re.match(r"^[a-zA-Z0-9_-]+$", function_name):
-        return False
-    return True
+    return bool(re.match(r"^[a-zA-Z0-9_-]+$", function_name))
 
 
 def generate_image_url(image_path):
-    if isinstance(image_path, str) and (
-        image_path.startswith("http://") or image_path.startswith("https://")
-    ):
+    if isinstance(image_path, str) and image_path.startswith(("http://", "https://")):
         return image_path
     strategy = getattr(settings, "URL_STRATEGY", "backend")
     if strategy == "s3":
         bucket_name = getattr(settings, "S3_BUCKET_NAME", "docsgpt-test-bucket")
         region_name = getattr(settings, "SAGEMAKER_REGION", "eu-central-1")
         return f"https://{bucket_name}.s3.{region_name}.amazonaws.com/{image_path}"
-    else:
-        base_url = getattr(settings, "API_URL", "http://localhost:7091")
-        return f"{base_url}/api/images/{image_path}"
+    base_url = getattr(settings, "API_URL", "http://localhost:7091")
+    return f"{base_url}/api/images/{image_path}"

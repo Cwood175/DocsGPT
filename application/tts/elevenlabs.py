@@ -1,7 +1,8 @@
-from io import BytesIO
 import base64
-from application.tts.base import BaseTTS
+from io import BytesIO
+
 from application.core.settings import settings
+from application.tts.base import BaseTTS
 
 
 class ElevenlabsTTS(BaseTTS):
@@ -10,8 +11,7 @@ class ElevenlabsTTS(BaseTTS):
 
         self.client = ElevenLabs(
             api_key=settings.ELEVENLABS_API_KEY,
-            )
-    
+        )
 
     def text_to_speech(self, text):
         lang = "en"

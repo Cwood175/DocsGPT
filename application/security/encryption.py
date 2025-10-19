@@ -1,10 +1,12 @@
 import base64
+import binascii
 import json
 import os
 
+from cryptography.exceptions import UnsupportedAlgorithm
 from cryptography.hazmat.backends import default_backend
 from cryptography.hazmat.primitives import hashes
-from cryptography.hazmat.primitives.ciphers import algorithms, Cipher, modes
+from cryptography.hazmat.primitives.ciphers import Cipher, algorithms, modes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
 from application.core.settings import settings
@@ -44,7 +46,7 @@ def encrypt_credentials(credentials: dict, user_id: str) -> str:
 
         result = salt + iv + encrypted_data
         return base64.b64encode(result).decode()
-    except Exception as e:
+    except (TypeError, ValueError, UnsupportedAlgorithm) as e:
         print(f"Warning: Failed to encrypt credentials: {e}")
         return ""
 
@@ -68,7 +70,7 @@ def decrypt_credentials(encrypted_data: str, user_id: str) -> dict:
         decrypted_data = _unpad_data(decrypted_padded)
 
         return json.loads(decrypted_data.decode())
-    except Exception as e:
+    except (binascii.Error, TypeError, ValueError, UnsupportedAlgorithm) as e:
         print(f"Warning: Failed to decrypt credentials: {e}")
         return {}
 

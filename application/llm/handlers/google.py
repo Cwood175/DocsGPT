@@ -1,5 +1,6 @@
 import uuid
-from typing import Any, Dict, Generator
+from collections.abc import Generator
+from typing import Any
 
 from application.llm.handlers.base import LLMHandler, LLMResponse, ToolCall
 
@@ -29,11 +30,7 @@ class GoogleLLMHandler(LLMHandler):
                 if hasattr(part, "function_call") and part.function_call is not None
             ]
 
-            content = " ".join(
-                part.text
-                for part in parts
-                if hasattr(part, "text") and part.text is not None
-            )
+            content = " ".join(part.text for part in parts if hasattr(part, "text") and part.text is not None)
             return LLMResponse(
                 content=content,
                 tool_calls=tool_calls,
@@ -57,7 +54,7 @@ class GoogleLLMHandler(LLMHandler):
                 raw_response=response,
             )
 
-    def create_tool_message(self, tool_call: ToolCall, result: Any) -> Dict:
+    def create_tool_message(self, tool_call: ToolCall, result: Any) -> dict:
         """Create Google-style tool message."""
 
         return {
@@ -74,5 +71,4 @@ class GoogleLLMHandler(LLMHandler):
 
     def _iterate_stream(self, response: Any) -> Generator:
         """Iterate through Google streaming response."""
-        for chunk in response:
-            yield chunk
+        yield from response

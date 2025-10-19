@@ -1,8 +1,9 @@
 from unittest.mock import MagicMock, patch
 
+from langchain.docstore.document import Document as LCDocument
+
 from application.parser.remote.crawler_loader import CrawlerLoader
 from application.parser.schema.base import Document
-from langchain.docstore.document import Document as LCDocument
 
 
 class DummyResponse:
@@ -161,7 +162,6 @@ def test_load_data_logs_and_skips_on_loader_error(mock_requests_get, mock_loggin
     failing_loader_instance.load.assert_called_once()
 
     mock_logging.error.assert_called_once()
-    message, = mock_logging.error.call_args.args
+    (message,) = mock_logging.error.call_args.args
     assert "Error processing URL http://example.com" in message
     assert mock_logging.error.call_args.kwargs.get("exc_info") is True
-

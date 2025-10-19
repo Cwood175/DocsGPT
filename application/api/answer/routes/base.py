@@ -1,13 +1,14 @@
 import datetime
 import json
 import logging
-from typing import Any, Dict, Generator, List, Optional
+from collections.abc import Generator
+from typing import Any
 
-from flask import Response, make_response, jsonify
+from flask import Response, jsonify, make_response
 from flask_restx import Namespace
+from pymongo.errors import PyMongoError
 
 from application.api.answer.services.conversation_service import ConversationService
-
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
 from application.llm.llm_creator import LLMCreator
@@ -30,9 +31,7 @@ class BaseAnswerResource:
         self.gpt_model = get_gpt_model()
         self.conversation_service = ConversationService()
 
-    def validate_request(
-        self, data: Dict[str, Any], require_conversation_id: bool = False
-    ) -> Optional[Response]:
+    def validate_request(self, data: dict[str, Any], require_conversation_id: bool = False) -> Response | None:
         """Common request validation"""
         required_fields = ["question"]
         if require_conversation_id:
@@ -41,9 +40,7 @@ class BaseAnswerResource:
             return missing_fields
         return None
 
-    def check_usage(
-            self, agent_config: Dict
-    ) -> Optional[Response]:
+    def check_usage(self, agent_config: dict) -> Response | None:
         """Check if there is a usage limit and if it is exceeded
 
         Args:
@@ -51,25 +48,17 @@ class BaseAnswerResource:
 
         Returns:
             None or Response if either of limits exceeded.
-        
+
         """
         api_key = agent_config.get("user_api_key")
         if not api_key:
             return None
-        
+
         agents_collection = self.db["agents"]
         agent = agents_collection.find_one({"key": api_key})
 
         if not agent:
-            return make_response(
-                jsonify(
-                    {
-                        "success": False,
-                        "message": "Invalid API key."
-                    }
-                ),
-                401
-            )
+            return make_response(jsonify({"success": False, "message": "Invalid API key."}), 401)
 
         limited_token_mode = agent.get("limited_token_mode", False)
         limited_request_mode = agent.get("limited_request_mode", False)
@@ -78,49 +67,33 @@ class BaseAnswerResource:
 
         token_usage_collection = self.db["token_usage"]
 
-        end_date = datetime.datetime.now()
+        end_date = datetime.datetime.now(datetime.UTC)
         start_date = end_date - datetime.timedelta(hours=24)
 
-        match_query = {
-            "timestamp": {"$gte": start_date, "$lte": end_date},
-            "api_key": api_key
-        }
-        
+        match_query = {"timestamp": {"$gte": start_date, "$lte": end_date}, "api_key": api_key}
+
         if limited_token_mode:
             token_pipeline = [
                 {"$match": match_query},
-                {
-                    "$group": {
-                        "_id": None,
-                        "total_tokens": {"$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}}
-                    }
-                }
+                {"$group": {"_id": None, "total_tokens": {"$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}}}},
             ]
             token_result = list(token_usage_collection.aggregate(token_pipeline))
             daily_token_usage = token_result[0]["total_tokens"] if token_result else 0
         else:
             daily_token_usage = 0
 
-        if limited_request_mode:
-            daily_request_usage = token_usage_collection.count_documents(match_query)
-        else:
-            daily_request_usage = 0
+        daily_request_usage = token_usage_collection.count_documents(match_query) if limited_request_mode else 0
 
-        if not limited_token_mode and not limited_request_mode:
-            return None
-        elif limited_token_mode and token_limit > daily_token_usage:
-            return None
-        elif limited_request_mode and request_limit > daily_request_usage:
+        if (
+            (not limited_token_mode and not limited_request_mode)
+            or (limited_token_mode and token_limit > daily_token_usage)
+            or (limited_request_mode and request_limit > daily_request_usage)
+        ):
             return None
 
         return make_response(
-            jsonify(
-                {
-                    "success": False,
-                    "message": "Exceeding usage limit, please try again later."
-                }
-            ),
-            429, # too many requests
+            jsonify({"success": False, "message": "Exceeding usage limit, please try again later."}),
+            429,  # too many requests
         )
 
     def complete_stream(
@@ -128,16 +101,16 @@ class BaseAnswerResource:
         question: str,
         agent: Any,
         retriever: Any,
-        conversation_id: Optional[str],
-        user_api_key: Optional[str],
-        decoded_token: Dict[str, Any],
+        conversation_id: str | None,
+        user_api_key: str | None,
+        decoded_token: dict[str, Any],
         isNoneDoc: bool = False,
-        index: Optional[int] = None,
+        index: int | None = None,
         should_save_conversation: bool = True,
-        attachment_ids: Optional[List[str]] = None,
-        agent_id: Optional[str] = None,
+        attachment_ids: list[str] | None = None,
+        agent_id: str | None = None,
         is_shared_usage: bool = False,
-        shared_token: Optional[str] = None,
+        shared_token: str | None = None,
     ) -> Generator[str, None, None]:
         """
         Generator function that streams the complete conversation response.
@@ -182,14 +155,10 @@ class BaseAnswerResource:
                     for source in line["sources"]:
                         truncated_source = source.copy()
                         if "text" in truncated_source:
-                            truncated_source["text"] = (
-                                truncated_source["text"][:100].strip() + "..."
-                            )
+                            truncated_source["text"] = truncated_source["text"][:100].strip() + "..."
                         truncated_sources.append(truncated_source)
                     if truncated_sources:
-                        data = json.dumps(
-                            {"type": "source", "source": truncated_sources}
-                        )
+                        data = json.dumps({"type": "source", "source": truncated_sources})
                         yield f"data: {data}\n\n"
                 elif "tool_calls" in line:
                     tool_calls = line["tool_calls"]
@@ -258,18 +227,18 @@ class BaseAnswerResource:
                 "sources": source_log_docs,
                 "retriever_params": retriever_params,
                 "attachments": attachment_ids,
-                "timestamp": datetime.datetime.now(datetime.timezone.utc),
+                "timestamp": datetime.datetime.now(datetime.UTC),
             }
             if is_structured:
                 log_data["structured_output"] = True
                 if schema_info:
                     log_data["schema"] = schema_info
-  
+
             # clean up text fields to be no longer than 10000 characters
             for key, value in log_data.items():
                 if isinstance(value, str) and len(value) > 10000:
                     log_data[key] = value[:10000]
-            
+
             self.user_logs_collection.insert_one(log_data)
 
             # End of stream
@@ -278,9 +247,7 @@ class BaseAnswerResource:
             yield f"data: {data}\n\n"
         except GeneratorExit:
             # Client aborted the connection
-            logger.info(
-                f"Stream aborted by client for question: {question[:50]}... "
-            )
+            logger.info(f"Stream aborted by client for question: {question[:50]}... ")
             # Save partial response to database before exiting
             if should_save_conversation and response_full:
                 try:
@@ -310,11 +277,18 @@ class BaseAnswerResource:
                         shared_token=shared_token,
                         attachment_ids=attachment_ids,
                     )
-                except Exception as e:
-                    logger.error(f"Error saving partial response: {str(e)}", exc_info=True)
+                except (PyMongoError, RuntimeError, TypeError, ValueError):
+                    logger.exception("Error saving partial response")
             raise
-        except Exception as e:
-            logger.error(f"Error in stream: {str(e)}", exc_info=True)
+        except (
+            KeyError,
+            OSError,
+            PyMongoError,
+            RuntimeError,
+            TypeError,
+            ValueError,
+        ):
+            logger.exception("Error in stream")
             data = json.dumps(
                 {
                     "type": "error",
@@ -322,7 +296,6 @@ class BaseAnswerResource:
                 }
             )
             yield f"data: {data}\n\n"
-            return
 
     def process_response_stream(self, stream):
         """Process the stream response for non-streaming endpoint"""

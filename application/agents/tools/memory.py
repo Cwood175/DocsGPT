@@ -1,12 +1,13 @@
-from datetime import datetime
-from pathlib import Path
-from typing import Any, Dict, List, Optional
 import re
 import uuid
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Any
 
-from .base import Tool
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
+
+from .base import Tool
 
 
 class MemoryTool(Tool):
@@ -15,7 +16,7 @@ class MemoryTool(Tool):
     Stores and retrieves information across conversations through a memory file directory.
     """
 
-    def __init__(self, tool_config: Optional[Dict[str, Any]] = None, user_id: Optional[str] = None) -> None:
+    def __init__(self, tool_config: dict[str, Any] | None = None, user_id: str | None = None) -> None:
         """Initialize the tool.
 
         Args:
@@ -24,7 +25,7 @@ class MemoryTool(Tool):
                            This ensures each user's tool configuration has isolated memories
             user_id: The authenticated user's id (should come from decoded_token["sub"]).
         """
-        self.user_id: Optional[str] = user_id
+        self.user_id: str | None = user_id
 
         # Get tool_id from configuration (passed from user_tools._id in production)
         # In production, tool_id is the MongoDB ObjectId string from user_tools collection
@@ -57,39 +58,22 @@ class MemoryTool(Tool):
             return "Error: MemoryTool requires a valid user_id."
 
         if action_name == "view":
-            return self._view(
-                kwargs.get("path", "/"),
-                kwargs.get("view_range")
-            )
+            return self._view(kwargs.get("path", "/"), kwargs.get("view_range"))
 
         if action_name == "create":
-            return self._create(
-                kwargs.get("path", ""),
-                kwargs.get("file_text", "")
-            )
+            return self._create(kwargs.get("path", ""), kwargs.get("file_text", ""))
 
         if action_name == "str_replace":
-            return self._str_replace(
-                kwargs.get("path", ""),
-                kwargs.get("old_str", ""),
-                kwargs.get("new_str", "")
-            )
+            return self._str_replace(kwargs.get("path", ""), kwargs.get("old_str", ""), kwargs.get("new_str", ""))
 
         if action_name == "insert":
-            return self._insert(
-                kwargs.get("path", ""),
-                kwargs.get("insert_line", 1),
-                kwargs.get("insert_text", "")
-            )
+            return self._insert(kwargs.get("path", ""), kwargs.get("insert_line", 1), kwargs.get("insert_text", ""))
 
         if action_name == "delete":
             return self._delete(kwargs.get("path", ""))
 
         if action_name == "rename":
-            return self._rename(
-                kwargs.get("old_path", ""),
-                kwargs.get("new_path", "")
-            )
+            return self._rename(kwargs.get("old_path", ""), kwargs.get("new_path", ""))
 
         return f"Unknown action: {action_name}"
 
@@ -104,15 +88,15 @@ class MemoryTool(Tool):
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "Path to file or directory (e.g., /notes.txt or /project/ or /)."
+                            "description": "Path to file or directory (e.g., /notes.txt or /project/ or /).",
                         },
                         "view_range": {
                             "type": "array",
                             "items": {"type": "integer"},
-                            "description": "Optional [start_line, end_line] to view specific lines (1-indexed)."
-                        }
+                            "description": "Optional [start_line, end_line] to view specific lines (1-indexed).",
+                        },
                     },
-                    "required": ["path"]
+                    "required": ["path"],
                 },
             },
             {
@@ -123,14 +107,11 @@ class MemoryTool(Tool):
                     "properties": {
                         "path": {
                             "type": "string",
-                            "description": "File path to create (e.g., /notes.txt or /project/task.txt)."
+                            "description": "File path to create (e.g., /notes.txt or /project/task.txt).",
                         },
-                        "file_text": {
-                            "type": "string",
-                            "description": "Content to write to the file."
-                        }
+                        "file_text": {"type": "string", "description": "Content to write to the file."},
                     },
-                    "required": ["path", "file_text"]
+                    "required": ["path", "file_text"],
                 },
             },
             {
@@ -139,20 +120,11 @@ class MemoryTool(Tool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "File path (e.g., /notes.txt)."
-                        },
-                        "old_str": {
-                            "type": "string",
-                            "description": "String to find."
-                        },
-                        "new_str": {
-                            "type": "string",
-                            "description": "String to replace with."
-                        }
+                        "path": {"type": "string", "description": "File path (e.g., /notes.txt)."},
+                        "old_str": {"type": "string", "description": "String to find."},
+                        "new_str": {"type": "string", "description": "String to replace with."},
                     },
-                    "required": ["path", "old_str", "new_str"]
+                    "required": ["path", "old_str", "new_str"],
                 },
             },
             {
@@ -161,20 +133,11 @@ class MemoryTool(Tool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "File path (e.g., /notes.txt)."
-                        },
-                        "insert_line": {
-                            "type": "integer",
-                            "description": "Line number to insert at (1-indexed)."
-                        },
-                        "insert_text": {
-                            "type": "string",
-                            "description": "Text to insert."
-                        }
+                        "path": {"type": "string", "description": "File path (e.g., /notes.txt)."},
+                        "insert_line": {"type": "integer", "description": "Line number to insert at (1-indexed)."},
+                        "insert_text": {"type": "string", "description": "Text to insert."},
                     },
-                    "required": ["path", "insert_line", "insert_text"]
+                    "required": ["path", "insert_line", "insert_text"],
                 },
             },
             {
@@ -183,12 +146,9 @@ class MemoryTool(Tool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "path": {
-                            "type": "string",
-                            "description": "Path to delete (e.g., /notes.txt or /project/)."
-                        }
+                        "path": {"type": "string", "description": "Path to delete (e.g., /notes.txt or /project/)."}
                     },
-                    "required": ["path"]
+                    "required": ["path"],
                 },
             },
             {
@@ -197,28 +157,22 @@ class MemoryTool(Tool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "old_path": {
-                            "type": "string",
-                            "description": "Current path (e.g., /old.txt)."
-                        },
-                        "new_path": {
-                            "type": "string",
-                            "description": "New path (e.g., /new.txt)."
-                        }
+                        "old_path": {"type": "string", "description": "Current path (e.g., /old.txt)."},
+                        "new_path": {"type": "string", "description": "New path (e.g., /new.txt)."},
                     },
-                    "required": ["old_path", "new_path"]
+                    "required": ["old_path", "new_path"],
                 },
             },
         ]
 
-    def get_config_requirements(self) -> Dict[str, Any]:
+    def get_config_requirements(self) -> dict[str, Any]:
         """Return configuration requirements."""
         return {}
 
     # -----------------------------
     # Path validation
     # -----------------------------
-    def _validate_path(self, path: str) -> Optional[str]:
+    def _validate_path(self, path: str) -> str | None:
         """Validate and normalize path.
 
         Args:
@@ -258,13 +212,13 @@ class MemoryTool(Tool):
                 normalized = normalized + "/"
 
             return normalized
-        except Exception:
+        except (TypeError, ValueError):
             return None
 
     # -----------------------------
     # Internal helpers
     # -----------------------------
-    def _view(self, path: str, view_range: Optional[List[int]] = None) -> str:
+    def _view(self, path: str, view_range: list[int] | None = None) -> str:
         """View directory contents or file contents."""
         validated_path = self._validate_path(path)
         if not validated_path:
@@ -283,11 +237,7 @@ class MemoryTool(Tool):
         search_path = path if path.endswith("/") else path + "/"
 
         # Find all files that start with this directory path
-        query = {
-            "user_id": self.user_id,
-            "tool_id": self.tool_id,
-            "path": {"$regex": f"^{re.escape(search_path)}"}
-        }
+        query = {"user_id": self.user_id, "tool_id": self.tool_id, "path": {"$regex": f"^{re.escape(search_path)}"}}
 
         docs = list(self.collection.find(query, {"path": 1}))
 
@@ -300,7 +250,7 @@ class MemoryTool(Tool):
             file_path = doc["path"]
             # Remove the directory prefix
             if file_path.startswith(search_path):
-                relative = file_path[len(search_path):]
+                relative = file_path[len(search_path) :]
                 if relative:
                     files.append(relative)
 
@@ -308,7 +258,7 @@ class MemoryTool(Tool):
         file_list = "\n".join(f"- {f}" for f in files)
         return f"Directory: {path}\n{file_list}"
 
-    def _view_file(self, path: str, view_range: Optional[List[int]] = None) -> str:
+    def _view_file(self, path: str, view_range: list[int] | None = None) -> str:
         """View file contents with optional line range."""
         doc = self.collection.find_one({"user_id": self.user_id, "tool_id": self.tool_id, "path": path})
 
@@ -346,13 +296,8 @@ class MemoryTool(Tool):
 
         self.collection.update_one(
             {"user_id": self.user_id, "tool_id": self.tool_id, "path": validated_path},
-            {
-                "$set": {
-                    "content": file_text,
-                    "updated_at": datetime.now()
-                }
-            },
-            upsert=True
+            {"$set": {"content": file_text, "updated_at": datetime.now(UTC)}},
+            upsert=True,
         )
 
         return f"File created: {validated_path}"
@@ -379,16 +324,14 @@ class MemoryTool(Tool):
 
         # Replace the string (case-insensitive)
         import re as regex_module
-        updated_content = regex_module.sub(regex_module.escape(old_str), new_str, current_content, flags=regex_module.IGNORECASE)
+
+        updated_content = regex_module.sub(
+            regex_module.escape(old_str), new_str, current_content, flags=regex_module.IGNORECASE
+        )
 
         self.collection.update_one(
             {"user_id": self.user_id, "tool_id": self.tool_id, "path": validated_path},
-            {
-                "$set": {
-                    "content": updated_content,
-                    "updated_at": datetime.now()
-                }
-            }
+            {"$set": {"content": updated_content, "updated_at": datetime.now(UTC)}},
         )
 
         return f"File updated: {validated_path}"
@@ -420,12 +363,7 @@ class MemoryTool(Tool):
 
         self.collection.update_one(
             {"user_id": self.user_id, "tool_id": self.tool_id, "path": validated_path},
-            {
-                "$set": {
-                    "content": updated_content,
-                    "updated_at": datetime.now()
-                }
-            }
+            {"$set": {"content": updated_content, "updated_at": datetime.now(UTC)}},
         )
 
         return f"Text inserted at line {insert_line} in {validated_path}"
@@ -444,31 +382,23 @@ class MemoryTool(Tool):
         # Check if it's a directory (ends with /)
         if validated_path.endswith("/"):
             # Delete all files in directory
-            result = self.collection.delete_many({
-                "user_id": self.user_id,
-                "tool_id": self.tool_id,
-                "path": {"$regex": f"^{re.escape(validated_path)}"}
-            })
+            result = self.collection.delete_many(
+                {"user_id": self.user_id, "tool_id": self.tool_id, "path": {"$regex": f"^{re.escape(validated_path)}"}}
+            )
             return f"Deleted directory and {result.deleted_count} file(s)."
 
         # Try to delete as directory first (without trailing slash)
         # Check if any files start with this path + /
         search_path = validated_path + "/"
-        directory_result = self.collection.delete_many({
-            "user_id": self.user_id,
-            "tool_id": self.tool_id,
-            "path": {"$regex": f"^{re.escape(search_path)}"}
-        })
+        directory_result = self.collection.delete_many(
+            {"user_id": self.user_id, "tool_id": self.tool_id, "path": {"$regex": f"^{re.escape(search_path)}"}}
+        )
 
         if directory_result.deleted_count > 0:
             return f"Deleted directory and {directory_result.deleted_count} file(s)."
 
         # Delete single file
-        result = self.collection.delete_one({
-            "user_id": self.user_id,
-            "tool_id": self.tool_id,
-            "path": validated_path
-        })
+        result = self.collection.delete_one({"user_id": self.user_id, "tool_id": self.tool_id, "path": validated_path})
 
         if result.deleted_count:
             return f"Deleted: {validated_path}"
@@ -492,11 +422,15 @@ class MemoryTool(Tool):
                 validated_new = validated_new + "/"
 
             # Find all files in the old directory
-            docs = list(self.collection.find({
-                "user_id": self.user_id,
-                "tool_id": self.tool_id,
-                "path": {"$regex": f"^{re.escape(validated_old)}"}
-            }))
+            docs = list(
+                self.collection.find(
+                    {
+                        "user_id": self.user_id,
+                        "tool_id": self.tool_id,
+                        "path": {"$regex": f"^{re.escape(validated_old)}"},
+                    }
+                )
+            )
 
             if not docs:
                 return f"Error: Directory not found: {validated_old}"
@@ -507,40 +441,33 @@ class MemoryTool(Tool):
                 new_file_path = old_file_path.replace(validated_old, validated_new, 1)
 
                 self.collection.update_one(
-                    {"_id": doc["_id"]},
-                    {"$set": {"path": new_file_path, "updated_at": datetime.now()}}
+                    {"_id": doc["_id"]}, {"$set": {"path": new_file_path, "updated_at": datetime.now(UTC)}}
                 )
 
             return f"Renamed directory: {validated_old} -> {validated_new} ({len(docs)} files)"
 
         # Rename single file
-        doc = self.collection.find_one({
-            "user_id": self.user_id,
-            "tool_id": self.tool_id,
-            "path": validated_old
-        })
+        doc = self.collection.find_one({"user_id": self.user_id, "tool_id": self.tool_id, "path": validated_old})
 
         if not doc:
             return f"Error: File not found: {validated_old}"
 
         # Check if new path already exists
-        existing = self.collection.find_one({
-            "user_id": self.user_id,
-            "tool_id": self.tool_id,
-            "path": validated_new
-        })
+        existing = self.collection.find_one({"user_id": self.user_id, "tool_id": self.tool_id, "path": validated_new})
 
         if existing:
             return f"Error: File already exists at {validated_new}"
 
         # Delete the old document and create a new one with the new path
         self.collection.delete_one({"user_id": self.user_id, "tool_id": self.tool_id, "path": validated_old})
-        self.collection.insert_one({
-            "user_id": self.user_id,
-            "tool_id": self.tool_id,
-            "path": validated_new,
-            "content": doc.get("content", ""),
-            "updated_at": datetime.now()
-        })
+        self.collection.insert_one(
+            {
+                "user_id": self.user_id,
+                "tool_id": self.tool_id,
+                "path": validated_new,
+                "content": doc.get("content", ""),
+                "updated_at": datetime.now(UTC),
+            }
+        )
 
         return f"Renamed: {validated_old} -> {validated_new}"

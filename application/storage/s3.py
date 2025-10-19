@@ -1,14 +1,19 @@
 """S3 storage implementation."""
 
 import io
+import logging
 import os
-from typing import BinaryIO, Callable, List
+import tempfile
+from collections.abc import Callable
+from typing import BinaryIO
 
 import boto3
-from application.core.settings import settings
-
-from application.storage.base import BaseStorage
 from botocore.exceptions import ClientError
+
+from application.core.settings import settings
+from application.storage.base import BaseStorage
+
+logger = logging.getLogger(__name__)
 
 
 class S3Storage(BaseStorage):
@@ -21,9 +26,7 @@ class S3Storage(BaseStorage):
         Args:
             bucket_name: S3 bucket name (optional, defaults to settings)
         """
-        self.bucket_name = bucket_name or getattr(
-            settings, "S3_BUCKET_NAME", "docsgpt-test-bucket"
-        )
+        self.bucket_name = bucket_name or getattr(settings, "S3_BUCKET_NAME", "docsgpt-test-bucket")
 
         # Get credentials from settings
 
@@ -46,9 +49,7 @@ class S3Storage(BaseStorage):
         **kwargs,
     ) -> dict:
         """Save a file to S3 storage."""
-        self.s3.upload_fileobj(
-            file_data, self.bucket_name, path, ExtraArgs={"StorageClass": storage_class}
-        )
+        self.s3.upload_fileobj(file_data, self.bucket_name, path, ExtraArgs={"StorageClass": storage_class})
 
         region = getattr(settings, "SAGEMAKER_REGION", None)
 
@@ -84,7 +85,7 @@ class S3Storage(BaseStorage):
         except ClientError:
             return False
 
-    def list_files(self, directory: str) -> List[str]:
+    def list_files(self, directory: str) -> list[str]:
         """List all files in a directory in S3 storage."""
         # Ensure directory ends with a slash if it's not empty
 
@@ -112,14 +113,9 @@ class S3Storage(BaseStorage):
         Returns:
             The result of the processor function
         """
-        import logging
-        import tempfile
-
         if not self.file_exists(path):
             raise FileNotFoundError(f"File not found in S3: {path}")
-        with tempfile.NamedTemporaryFile(
-            suffix=os.path.splitext(path)[1], delete=True
-        ) as temp_file:
+        with tempfile.NamedTemporaryFile(suffix=os.path.splitext(path)[1], delete=True) as temp_file:
             try:
                 # Download the file from S3 to the temporary file
 
@@ -127,8 +123,8 @@ class S3Storage(BaseStorage):
                 temp_file.flush()
 
                 return processor_func(local_path=temp_file.name, **kwargs)
-            except Exception as e:
-                logging.error(f"Error processing S3 file {path}: {e}", exc_info=True)
+            except Exception:
+                logger.exception("Error processing S3 file %s", path)
                 raise
 
     def is_directory(self, path: str) -> bool:
@@ -145,16 +141,12 @@ class S3Storage(BaseStorage):
             bool: True if the path is a directory, False otherwise
         """
         # Ensure path ends with a slash if not empty
-        if path and not path.endswith('/'):
-            path += '/'
+        if path and not path.endswith("/"):
+            path += "/"
 
-        response = self.s3.list_objects_v2(
-            Bucket=self.bucket_name,
-            Prefix=path,
-            MaxKeys=1
-        )
+        response = self.s3.list_objects_v2(Bucket=self.bucket_name, Prefix=path, MaxKeys=1)
 
-        return 'Contents' in response
+        return "Contents" in response
 
     def remove_directory(self, directory: str) -> bool:
         """
@@ -171,33 +163,30 @@ class S3Storage(BaseStorage):
             bool: True if removal was successful, False otherwise
         """
         # Ensure directory ends with a slash if not empty
-        if directory and not directory.endswith('/'):
-            directory += '/'
+        if directory and not directory.endswith("/"):
+            directory += "/"
 
         try:
             # Get all objects with the directory prefix
             objects_to_delete = []
-            paginator = self.s3.get_paginator('list_objects_v2')
+            paginator = self.s3.get_paginator("list_objects_v2")
             pages = paginator.paginate(Bucket=self.bucket_name, Prefix=directory)
 
             for page in pages:
-                if 'Contents' in page:
-                    for obj in page['Contents']:
-                        objects_to_delete.append({'Key': obj['Key']})
+                if "Contents" in page:
+                    for obj in page["Contents"]:
+                        objects_to_delete.append({"Key": obj["Key"]})
 
             if not objects_to_delete:
                 return False
 
             batch_size = 1000
             for i in range(0, len(objects_to_delete), batch_size):
-                batch = objects_to_delete[i:i + batch_size]
+                batch = objects_to_delete[i : i + batch_size]
 
-                response = self.s3.delete_objects(
-                    Bucket=self.bucket_name,
-                    Delete={'Objects': batch}
-                )
+                response = self.s3.delete_objects(Bucket=self.bucket_name, Delete={"Objects": batch})
 
-                if 'Errors' in response and response['Errors']:
+                if response.get("Errors"):
                     return False
 
             return True

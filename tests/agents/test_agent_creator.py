@@ -1,4 +1,5 @@
 import pytest
+
 from application.agents.agent_creator import AgentCreator
 from application.agents.classic_agent import ClassicAgent
 from application.agents.react_agent import ReActAgent
@@ -6,7 +7,6 @@ from application.agents.react_agent import ReActAgent
 
 @pytest.mark.unit
 class TestAgentCreator:
-
     def test_create_classic_agent(self, agent_base_params):
         agent = AgentCreator.create_agent("classic", **agent_base_params)
         assert isinstance(agent, ClassicAgent)

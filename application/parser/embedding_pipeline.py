@@ -1,51 +1,56 @@
-import os
+#!/usr/bin/env python3
 import logging
-from typing import List, Optional, Any
+import os
+from typing import Any
+
 from retry import retry
 from tqdm import tqdm
+
 from application.core.settings import settings
 from application.vectorstore.vector_creator import VectorCreator
+
+logger = logging.getLogger(__name__)
 
 
 def sanitize_content(content: str) -> str:
     """
     Remove NUL characters that can cause vector store ingestion to fail.
-    
+
     Args:
         content (str): Raw content that may contain NUL characters
-        
+
     Returns:
         str: Sanitized content with NUL characters removed
     """
     if not content:
         return content
-    return content.replace('\x00', '')
+    return content.replace("\x00", "")
 
 
 @retry(tries=10, delay=60)
 def add_text_to_store_with_retry(store: Any, doc: Any, source_id: str) -> None:
     """Add a document's text and metadata to the vector store with retry logic.
-    
+
     Args:
         store: The vector store object.
         doc: The document to be added.
         source_id: Unique identifier for the source.
-        
+
     Raises:
         Exception: If document addition fails after all retry attempts.
     """
     try:
         # Sanitize content to remove NUL characters that cause ingestion failures
         doc.page_content = sanitize_content(doc.page_content)
-        
+
         doc.metadata["source_id"] = str(source_id)
         store.add_texts([doc.page_content], metadatas=[doc.metadata])
     except Exception as e:
-        logging.error(f"Failed to add document with retry: {e}", exc_info=True)
+        logger.exception(f"Failed to add document with retry: {e}")
         raise
 
 
-def embed_and_store_documents(docs: List[Any], folder_name: str, source_id: str, task_status: Any) -> None:
+def embed_and_store_documents(docs: list[Any], folder_name: str, source_id: str, task_status: Any) -> None:
     """Embeds documents and stores them in a vector store.
 
     Args:
@@ -56,7 +61,7 @@ def embed_and_store_documents(docs: List[Any], folder_name: str, source_id: str,
 
     Returns:
         None
-        
+
     Raises:
         OSError: If unable to create folder or save vector store.
         Exception: If vector store creation or document embedding fails.
@@ -100,13 +105,13 @@ def embed_and_store_documents(docs: List[Any], folder_name: str, source_id: str,
             # Add document to vector store
             add_text_to_store_with_retry(store, doc, source_id)
         except Exception as e:
-            logging.error(f"Error embedding document {idx}: {e}", exc_info=True)
-            logging.info(f"Saving progress at document {idx} out of {total_docs}")
+            logger.exception(f"Error embedding document {idx}: {e}")
+            logger.info(f"Saving progress at document {idx} out of {total_docs}")
             try:
                 store.save_local(folder_name)
-                logging.info("Progress saved successfully")
+                logger.info("Progress saved successfully")
             except Exception as save_error:
-                logging.error(f"CRITICAL: Failed to save progress: {save_error}", exc_info=True)
+                logger.exception(f"CRITICAL: Failed to save progress: {save_error}")
                 # Continue without breaking to attempt final save
             break
 
@@ -114,9 +119,9 @@ def embed_and_store_documents(docs: List[Any], folder_name: str, source_id: str,
     if settings.VECTOR_STORE == "faiss":
         try:
             store.save_local(folder_name)
-            logging.info("Vector store saved successfully.")
+            logger.info("Vector store saved successfully.")
         except Exception as e:
-            logging.error(f"CRITICAL: Failed to save final vector store: {e}", exc_info=True)
+            logger.exception(f"CRITICAL: Failed to save final vector store: {e}")
             raise OSError(f"Unable to save vector store to {folder_name}: {e}") from e
     else:
-        logging.info("Vector store saved successfully.")
+        logger.info("Vector store saved successfully.")

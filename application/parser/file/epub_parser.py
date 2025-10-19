@@ -4,7 +4,6 @@ Contains parsers for epub files.
 """
 
 from pathlib import Path
-from typing import Dict
 
 from application.parser.file.base_parser import BaseParser
 
@@ -12,7 +11,7 @@ from application.parser.file.base_parser import BaseParser
 class EpubParser(BaseParser):
     """Epub Parser."""
 
-    def _init_parser(self) -> Dict:
+    def _init_parser(self) -> dict:
         """Init parser."""
         return {}
 
@@ -35,9 +34,7 @@ class EpubParser(BaseParser):
         for item in book.get_items():
             # Chapters are typically located in epub documents items.
             if item.get_type() == ebooklib.ITEM_DOCUMENT:
-                text_list.append(
-                    html2text.html2text(item.get_content().decode("utf-8"))
-                )
+                text_list.append(html2text.html2text(item.get_content().decode("utf-8")))
 
         text = "\n".join(text_list)
         return text

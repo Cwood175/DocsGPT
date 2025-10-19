@@ -2,15 +2,13 @@
 
 from bson.objectid import ObjectId
 from flask import current_app, jsonify, make_response, request
-from flask_restx import fields, Namespace, Resource
+from flask_restx import Namespace, Resource, fields
 
 from application.api import api
 from application.api.user.base import get_vector_store, sources_collection
 from application.utils import check_required_fields, num_tokens_from_string
 
-sources_chunks_ns = Namespace(
-    "sources", description="Source document management operations", path="/api"
-)
+sources_chunks_ns = Namespace("sources", description="Source document management operations", path="/api")
 
 
 @sources_chunks_ns.route("/get_chunks")
@@ -40,9 +38,7 @@ class GetChunks(Resource):
             return make_response(jsonify({"error": "Invalid doc_id"}), 400)
         doc = sources_collection.find_one({"_id": ObjectId(doc_id), "user": user})
         if not doc:
-            return make_response(
-                jsonify({"error": "Document not found or access denied"}), 404
-            )
+            return make_response(jsonify({"error": "Document not found or access denied"}), 404)
         try:
             store = get_vector_store(doc_id)
             chunks = store.get_chunks()
@@ -88,8 +84,8 @@ class GetChunks(Resource):
                 ),
                 200,
             )
-        except Exception as e:
-            current_app.logger.error(f"Error getting chunks: {e}", exc_info=True)
+        except (OSError, RuntimeError, ValueError) as e:
+            current_app.logger.exception(f"Error getting chunks: {e}")
             return make_response(jsonify({"success": False}), 500)
 
 
@@ -131,9 +127,7 @@ class AddChunk(Resource):
             return make_response(jsonify({"error": "Invalid doc_id"}), 400)
         doc = sources_collection.find_one({"_id": ObjectId(doc_id), "user": user})
         if not doc:
-            return make_response(
-                jsonify({"error": "Document not found or access denied"}), 404
-            )
+            return make_response(jsonify({"error": "Document not found or access denied"}), 404)
         try:
             store = get_vector_store(doc_id)
             chunk_id = store.add_chunk(text, metadata)
@@ -141,8 +135,8 @@ class AddChunk(Resource):
                 jsonify({"message": "Chunk added successfully", "chunk_id": chunk_id}),
                 201,
             )
-        except Exception as e:
-            current_app.logger.error(f"Error adding chunk: {e}", exc_info=True)
+        except (OSError, RuntimeError, ValueError) as e:
+            current_app.logger.exception(f"Error adding chunk: {e}")
             return make_response(jsonify({"success": False}), 500)
 
 
@@ -164,23 +158,19 @@ class DeleteChunk(Resource):
             return make_response(jsonify({"error": "Invalid doc_id"}), 400)
         doc = sources_collection.find_one({"_id": ObjectId(doc_id), "user": user})
         if not doc:
-            return make_response(
-                jsonify({"error": "Document not found or access denied"}), 404
-            )
+            return make_response(jsonify({"error": "Document not found or access denied"}), 404)
         try:
             store = get_vector_store(doc_id)
             deleted = store.delete_chunk(chunk_id)
             if deleted:
-                return make_response(
-                    jsonify({"message": "Chunk deleted successfully"}), 200
-                )
+                return make_response(jsonify({"message": "Chunk deleted successfully"}), 200)
             else:
                 return make_response(
                     jsonify({"message": "Chunk not found or could not be deleted"}),
                     404,
                 )
-        except Exception as e:
-            current_app.logger.error(f"Error deleting chunk: {e}", exc_info=True)
+        except (OSError, RuntimeError, ValueError) as e:
+            current_app.logger.exception(f"Error deleting chunk: {e}")
             return make_response(jsonify({"success": False}), 500)
 
 
@@ -191,12 +181,8 @@ class UpdateChunk(Resource):
             "UpdateChunkModel",
             {
                 "id": fields.String(required=True, description="Document ID"),
-                "chunk_id": fields.String(
-                    required=True, description="Chunk ID to update"
-                ),
-                "text": fields.String(
-                    required=False, description="New text of the chunk"
-                ),
+                "chunk_id": fields.String(required=True, description="Chunk ID to update"),
+                "text": fields.String(required=False, description="New text of the chunk"),
                 "metadata": fields.Raw(
                     required=False,
                     description="Updated metadata associated with the chunk",
@@ -231,9 +217,7 @@ class UpdateChunk(Resource):
             return make_response(jsonify({"error": "Invalid doc_id"}), 400)
         doc = sources_collection.find_one({"_id": ObjectId(doc_id), "user": user})
         if not doc:
-            return make_response(
-                jsonify({"error": "Document not found or access denied"}), 404
-            )
+            return make_response(jsonify({"error": "Document not found or access denied"}), 404)
         try:
             store = get_vector_store(doc_id)
 
@@ -268,11 +252,9 @@ class UpdateChunk(Resource):
                     ),
                     200,
                 )
-            except Exception as add_error:
-                current_app.logger.error(f"Failed to add updated chunk: {add_error}")
-                return make_response(
-                    jsonify({"error": "Failed to update chunk - addition failed"}), 500
-                )
-        except Exception as e:
-            current_app.logger.error(f"Error updating chunk: {e}", exc_info=True)
+            except (OSError, RuntimeError, ValueError) as add_error:
+                current_app.logger.exception(f"Failed to add updated chunk: {add_error}")
+                return make_response(jsonify({"error": "Failed to update chunk - addition failed"}), 500)
+        except (KeyError, OSError, RuntimeError, ValueError) as e:
+            current_app.logger.exception(f"Error updating chunk: {e}")
             return make_response(jsonify({"success": False}), 500)

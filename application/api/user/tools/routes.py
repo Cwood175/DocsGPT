@@ -2,7 +2,7 @@
 
 from bson.objectid import ObjectId
 from flask import current_app, jsonify, make_response, request
-from flask_restx import fields, Namespace, Resource
+from flask_restx import Namespace, Resource, fields
 
 from application.agents.tools.tool_manager import ToolManager
 from application.api import api
@@ -36,10 +36,8 @@ class AvailableTools(Resource):
                         "configRequirements": tool_instance.get_config_requirements(),
                     }
                 )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error getting available tools: {err}", exc_info=True
-            )
+        except (AttributeError, KeyError, TypeError, ValueError) as err:
+            current_app.logger.exception(f"Error getting available tools: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True, "data": tools_metadata}), 200)
 
@@ -59,8 +57,8 @@ class GetTools(Resource):
                 tool["id"] = str(tool["_id"])
                 tool.pop("_id")
                 user_tools.append(tool)
-        except Exception as err:
-            current_app.logger.error(f"Error getting user tools: {err}", exc_info=True)
+        except (AttributeError, KeyError, TypeError, ValueError) as err:
+            current_app.logger.exception(f"Error getting user tools: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True, "tools": user_tools}), 200)
 
@@ -72,21 +70,11 @@ class CreateTool(Resource):
             "CreateToolModel",
             {
                 "name": fields.String(required=True, description="Name of the tool"),
-                "displayName": fields.String(
-                    required=True, description="Display name for the tool"
-                ),
-                "description": fields.String(
-                    required=True, description="Tool description"
-                ),
-                "config": fields.Raw(
-                    required=True, description="Configuration of the tool"
-                ),
-                "customName": fields.String(
-                    required=False, description="Custom name for the tool"
-                ),
-                "status": fields.Boolean(
-                    required=True, description="Status of the tool"
-                ),
+                "displayName": fields.String(required=True, description="Display name for the tool"),
+                "description": fields.String(required=True, description="Tool description"),
+                "config": fields.Raw(required=True, description="Configuration of the tool"),
+                "customName": fields.String(required=False, description="Custom name for the tool"),
+                "status": fields.Boolean(required=True, description="Status of the tool"),
             },
         )
     )
@@ -110,25 +98,18 @@ class CreateTool(Resource):
         try:
             tool_instance = tool_manager.tools.get(data["name"])
             if not tool_instance:
-                return make_response(
-                    jsonify({"success": False, "message": "Tool not found"}), 404
-                )
+                return make_response(jsonify({"success": False, "message": "Tool not found"}), 404)
             actions_metadata = tool_instance.get_actions_metadata()
             transformed_actions = []
             for action in actions_metadata:
                 action["active"] = True
-                if "parameters" in action:
-                    if "properties" in action["parameters"]:
-                        for param_name, param_details in action["parameters"][
-                            "properties"
-                        ].items():
-                            param_details["filled_by_llm"] = True
-                            param_details["value"] = ""
+                if "parameters" in action and "properties" in action["parameters"]:
+                    for param_name, param_details in action["parameters"]["properties"].items():
+                        param_details["filled_by_llm"] = True
+                        param_details["value"] = ""
                 transformed_actions.append(action)
-        except Exception as err:
-            current_app.logger.error(
-                f"Error getting tool actions: {err}", exc_info=True
-            )
+        except (AttributeError, KeyError, TypeError, ValueError) as err:
+            current_app.logger.exception(f"Error getting tool actions: {err}")
             return make_response(jsonify({"success": False}), 400)
         try:
             new_tool = {
@@ -143,8 +124,8 @@ class CreateTool(Resource):
             }
             resp = user_tools_collection.insert_one(new_tool)
             new_id = str(resp.inserted_id)
-        except Exception as err:
-            current_app.logger.error(f"Error creating tool: {err}", exc_info=True)
+        except (AttributeError, KeyError, TypeError, ValueError) as err:
+            current_app.logger.exception(f"Error creating tool: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"id": new_id}), 200)
 
@@ -161,9 +142,7 @@ class UpdateTool(Resource):
                 "customName": fields.String(description="Custom name for the tool"),
                 "description": fields.String(description="Tool description"),
                 "config": fields.Raw(description="Configuration of the tool"),
-                "actions": fields.List(
-                    fields.Raw, description="Actions the tool can perform"
-                ),
+                "actions": fields.List(fields.Raw, description="Actions the tool can perform"),
                 "status": fields.Boolean(description="Status of the tool"),
             },
         )
@@ -192,22 +171,19 @@ class UpdateTool(Resource):
             if "actions" in data:
                 update_data["actions"] = data["actions"]
             if "config" in data:
-                if "actions" in data["config"]:
-                    for action_name in list(data["config"]["actions"].keys()):
-                        if not validate_function_name(action_name):
-                            return make_response(
-                                jsonify(
-                                    {
-                                        "success": False,
-                                        "message": f"Invalid function name '{action_name}'. Function names must match pattern '^[a-zA-Z0-9_-]+$'.",
-                                        "param": "tools[].function.name",
-                                    }
-                                ),
-                                400,
-                            )
-                tool_doc = user_tools_collection.find_one(
-                    {"_id": ObjectId(data["id"]), "user": user}
-                )
+                for action_name in data["config"].get("actions", {}):
+                    if not validate_function_name(action_name):
+                        return make_response(
+                            jsonify(
+                                {
+                                    "success": False,
+                                    "message": f"Invalid function name '{action_name}'. Function names must match pattern '^[a-zA-Z0-9_-]+$'.",
+                                    "param": "tools[].function.name",
+                                }
+                            ),
+                            400,
+                        )
+                tool_doc = user_tools_collection.find_one({"_id": ObjectId(data["id"]), "user": user})
                 if tool_doc and tool_doc.get("name") == "mcp_tool":
                     config = data["config"]
                     existing_config = tool_doc.get("config", {})
@@ -216,35 +192,27 @@ class UpdateTool(Resource):
                     storage_config.update(config)
                     existing_credentials = {}
                     if "encrypted_credentials" in existing_config:
-                        existing_credentials = decrypt_credentials(
-                            existing_config["encrypted_credentials"], user
-                        )
+                        existing_credentials = decrypt_credentials(existing_config["encrypted_credentials"], user)
                     auth_credentials = existing_credentials.copy()
                     auth_type = storage_config.get("auth_type", "none")
                     if auth_type == "api_key":
-                        if "api_key" in config and config["api_key"]:
+                        if config.get("api_key"):
                             auth_credentials["api_key"] = config["api_key"]
                         if "api_key_header" in config:
-                            auth_credentials["api_key_header"] = config[
-                                "api_key_header"
-                            ]
+                            auth_credentials["api_key_header"] = config["api_key_header"]
                     elif auth_type == "bearer":
-                        if "bearer_token" in config and config["bearer_token"]:
+                        if config.get("bearer_token"):
                             auth_credentials["bearer_token"] = config["bearer_token"]
-                        elif "encrypted_token" in config and config["encrypted_token"]:
+                        elif config.get("encrypted_token"):
                             auth_credentials["bearer_token"] = config["encrypted_token"]
                     elif auth_type == "basic":
-                        if "username" in config and config["username"]:
+                        if config.get("username"):
                             auth_credentials["username"] = config["username"]
-                        if "password" in config and config["password"]:
+                        if config.get("password"):
                             auth_credentials["password"] = config["password"]
                     if auth_type != "none" and auth_credentials:
-                        encrypted_credentials_string = encrypt_credentials(
-                            auth_credentials, user
-                        )
-                        storage_config["encrypted_credentials"] = (
-                            encrypted_credentials_string
-                        )
+                        encrypted_credentials_string = encrypt_credentials(auth_credentials, user)
+                        storage_config["encrypted_credentials"] = encrypted_credentials_string
                     elif auth_type == "none":
                         storage_config.pop("encrypted_credentials", None)
                     for field in [
@@ -265,8 +233,8 @@ class UpdateTool(Resource):
                 {"_id": ObjectId(data["id"]), "user": user},
                 {"$set": update_data},
             )
-        except Exception as err:
-            current_app.logger.error(f"Error updating tool: {err}", exc_info=True)
+        except (AttributeError, KeyError, TypeError, ValueError) as err:
+            current_app.logger.exception(f"Error updating tool: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -278,9 +246,7 @@ class UpdateToolConfig(Resource):
             "UpdateToolConfigModel",
             {
                 "id": fields.String(required=True, description="Tool ID"),
-                "config": fields.Raw(
-                    required=True, description="Configuration of the tool"
-                ),
+                "config": fields.Raw(required=True, description="Configuration of the tool"),
             },
         )
     )
@@ -300,10 +266,8 @@ class UpdateToolConfig(Resource):
                 {"_id": ObjectId(data["id"]), "user": user},
                 {"$set": {"config": data["config"]}},
             )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error updating tool config: {err}", exc_info=True
-            )
+        except (AttributeError, KeyError, TypeError, ValueError) as err:
+            current_app.logger.exception(f"Error updating tool config: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -339,10 +303,8 @@ class UpdateToolActions(Resource):
                 {"_id": ObjectId(data["id"]), "user": user},
                 {"$set": {"actions": data["actions"]}},
             )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error updating tool actions: {err}", exc_info=True
-            )
+        except (AttributeError, KeyError, TypeError, ValueError) as err:
+            current_app.logger.exception(f"Error updating tool actions: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -354,9 +316,7 @@ class UpdateToolStatus(Resource):
             "UpdateToolStatusModel",
             {
                 "id": fields.String(required=True, description="Tool ID"),
-                "status": fields.Boolean(
-                    required=True, description="Status of the tool"
-                ),
+                "status": fields.Boolean(required=True, description="Status of the tool"),
             },
         )
     )
@@ -376,10 +336,8 @@ class UpdateToolStatus(Resource):
                 {"_id": ObjectId(data["id"]), "user": user},
                 {"$set": {"status": data["status"]}},
             )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error updating tool status: {err}", exc_info=True
-            )
+        except (AttributeError, KeyError, TypeError, ValueError) as err:
+            current_app.logger.exception(f"Error updating tool status: {err}")
             return make_response(jsonify({"success": False}), 400)
         return make_response(jsonify({"success": True}), 200)
 
@@ -404,12 +362,10 @@ class DeleteTool(Resource):
         if missing_fields:
             return missing_fields
         try:
-            result = user_tools_collection.delete_one(
-                {"_id": ObjectId(data["id"]), "user": user}
-            )
+            result = user_tools_collection.delete_one({"_id": ObjectId(data["id"]), "user": user})
             if result.deleted_count == 0:
                 return {"success": False, "message": "Tool not found"}, 404
-        except Exception as err:
-            current_app.logger.error(f"Error deleting tool: {err}", exc_info=True)
+        except (AttributeError, KeyError, TypeError, ValueError) as err:
+            current_app.logger.exception(f"Error deleting tool: {err}")
             return {"success": False}, 400
         return {"success": True}, 200

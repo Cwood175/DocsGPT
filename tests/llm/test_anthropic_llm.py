@@ -1,10 +1,13 @@
 import sys
 import types
+
 import pytest
+
 
 class _FakeCompletion:
     def __init__(self, text):
         self.completion = text
+
 
 class _FakeCompletions:
     def __init__(self):
@@ -16,6 +19,7 @@ class _FakeCompletions:
         if kwargs.get("stream"):
             return self._stream
         return _FakeCompletion("final")
+
 
 class _FakeAnthropic:
     def __init__(self, api_key=None):
@@ -62,4 +66,3 @@ def test_anthropic_raw_gen_stream_yields_chunks():
     gen = llm._raw_gen_stream(llm, model="claude", messages=msgs, stream=True, max_tokens=10)
     chunks = list(gen)
     assert chunks == ["s1", "s2"]
-
