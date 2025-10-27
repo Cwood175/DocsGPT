@@ -1,13 +1,11 @@
 import logging
 import traceback
 
-from flask import request, Response
-from flask_restx import fields, Resource
+from flask import Response, request
+from flask_restx import Resource, fields
 
 from application.api import api
-
-from application.api.answer.routes.base import answer_ns, BaseAnswerResource
-
+from application.api.answer.routes.base import BaseAnswerResource, answer_ns
 from application.api.answer.services.stream_processor import StreamProcessor
 
 logger = logging.getLogger(__name__)
@@ -22,9 +20,7 @@ class StreamResource(Resource, BaseAnswerResource):
     stream_model = answer_ns.model(
         "StreamModel",
         {
-            "question": fields.String(
-                required=True, description="Question to be asked"
-            ),
+            "question": fields.String(required=True, description="Question to be asked"),
             "history": fields.List(
                 fields.String,
                 required=False,
@@ -34,32 +30,20 @@ class StreamResource(Resource, BaseAnswerResource):
                 required=False,
                 description="Existing conversation ID (loads history)",
             ),
-            "prompt_id": fields.String(
-                required=False, default="default", description="Prompt ID"
-            ),
-            "chunks": fields.Integer(
-                required=False, default=2, description="Number of chunks"
-            ),
+            "prompt_id": fields.String(required=False, default="default", description="Prompt ID"),
+            "chunks": fields.Integer(required=False, default=2, description="Number of chunks"),
             "token_limit": fields.Integer(required=False, description="Token limit"),
             "retriever": fields.String(required=False, description="Retriever type"),
             "api_key": fields.String(required=False, description="API key"),
-            "active_docs": fields.String(
-                required=False, description="Active documents"
-            ),
-            "isNoneDoc": fields.Boolean(
-                required=False, description="Flag indicating if no document is used"
-            ),
-            "index": fields.Integer(
-                required=False, description="Index of the query to update"
-            ),
+            "active_docs": fields.String(required=False, description="Active documents"),
+            "isNoneDoc": fields.Boolean(required=False, description="Flag indicating if no document is used"),
+            "index": fields.Integer(required=False, description="Index of the query to update"),
             "save_conversation": fields.Boolean(
                 required=False,
                 default=True,
                 description="Whether to save the conversation",
             ),
-            "attachments": fields.List(
-                fields.String, required=False, description="List of attachment IDs"
-            ),
+            "attachments": fields.List(fields.String, required=False, description="List of attachment IDs"),
             "passthrough": fields.Raw(
                 required=False,
                 description="Dynamic parameters to inject into prompt template",
@@ -81,9 +65,7 @@ class StreamResource(Resource, BaseAnswerResource):
             docs_together, docs_list = processor.pre_fetch_docs(data["question"])
             tools_data = processor.pre_fetch_tools()
 
-            agent = processor.create_agent(
-                docs_together=docs_together, docs=docs_list, tools_data=tools_data
-            )
+            agent = processor.create_agent(docs_together=docs_together, docs=docs_list, tools_data=tools_data)
 
             if error := self.check_usage(processor.agent_config):
                 return error
@@ -107,7 +89,7 @@ class StreamResource(Resource, BaseAnswerResource):
         except ValueError as e:
             message = "Malformed request body"
             logger.error(
-                f"/stream - error: {message} - specific error: {str(e)} - traceback: {traceback.format_exc()}",
+                f"/stream - error: {message} - specific error: {e!s} - traceback: {traceback.format_exc()}",
                 extra={"error": str(e), "traceback": traceback.format_exc()},
             )
             return Response(
@@ -115,9 +97,9 @@ class StreamResource(Resource, BaseAnswerResource):
                 status=400,
                 mimetype="text/event-stream",
             )
-        except Exception as e:
+        except (AttributeError, KeyError, RuntimeError, TypeError) as e:
             logger.error(
-                f"/stream - error: {str(e)} - traceback: {traceback.format_exc()}",
+                f"/stream - error: {e!s} - traceback: {traceback.format_exc()}",
                 extra={"error": str(e), "traceback": traceback.format_exc()},
             )
             return Response(

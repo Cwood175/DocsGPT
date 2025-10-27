@@ -1,12 +1,13 @@
 import logging
-from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional
+from datetime import UTC, datetime
+from typing import Any
+
+from bson import ObjectId
+from bson.errors import InvalidId
+from pymongo.errors import PyMongoError
 
 from application.core.mongo_db import MongoDB
-
 from application.core.settings import settings
-from bson import ObjectId
-
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +19,7 @@ class ConversationService:
         self.conversations_collection = db["conversations"]
         self.agents_collection = db["agents"]
 
-    def get_conversation(
-        self, conversation_id: str, user_id: str
-    ) -> Optional[Dict[str, Any]]:
+    def get_conversation(self, conversation_id: str, user_id: str) -> dict[str, Any] | None:
         """Retrieve a conversation with proper access control"""
         if not conversation_id or not user_id:
             return None
@@ -33,40 +32,38 @@ class ConversationService:
             )
 
             if not conversation:
-                logger.warning(
-                    f"Conversation not found or unauthorized - ID: {conversation_id}, User: {user_id}"
-                )
+                logger.warning(f"Conversation not found or unauthorized - ID: {conversation_id}, User: {user_id}")
                 return None
             conversation["_id"] = str(conversation["_id"])
             return conversation
-        except Exception as e:
-            logger.error(f"Error fetching conversation: {str(e)}", exc_info=True)
+        except (InvalidId, PyMongoError) as e:
+            logger.exception(f"Error fetching conversation: {e!s}")
             return None
 
     def save_conversation(
         self,
-        conversation_id: Optional[str],
+        conversation_id: str | None,
         question: str,
         response: str,
         thought: str,
-        sources: List[Dict[str, Any]],
-        tool_calls: List[Dict[str, Any]],
+        sources: list[dict[str, Any]],
+        tool_calls: list[dict[str, Any]],
         llm: Any,
         gpt_model: str,
-        decoded_token: Dict[str, Any],
-        index: Optional[int] = None,
-        api_key: Optional[str] = None,
-        agent_id: Optional[str] = None,
+        decoded_token: dict[str, Any],
+        index: int | None = None,
+        api_key: str | None = None,
+        agent_id: str | None = None,
         is_shared_usage: bool = False,
-        shared_token: Optional[str] = None,
-        attachment_ids: Optional[List[str]] = None,
+        shared_token: str | None = None,
+        attachment_ids: list[str] | None = None,
     ) -> str:
         """Save or update a conversation in the database"""
         user_id = decoded_token.get("sub")
         if not user_id:
             raise ValueError("User ID not found in token")
-        current_time = datetime.now(timezone.utc)
-        
+        current_time = datetime.now(UTC)
+
         # clean up in sources array such that we save max 1k characters for text part
         for source in sources:
             if "text" in source and isinstance(source["text"], str):
@@ -146,9 +143,7 @@ class ConversationService:
                 },
             ]
 
-            completion = llm.gen(
-                model=gpt_model, messages=messages_summary, max_tokens=30
-            )
+            completion = llm.gen(model=gpt_model, messages=messages_summary, max_tokens=30)
 
             conversation_data = {
                 "user": user_id,

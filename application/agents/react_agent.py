@@ -1,24 +1,19 @@
 import logging
 import os
-from typing import Any, Dict, Generator, List
+from collections.abc import Generator
+from typing import Any
 
 from application.agents.base import BaseAgent
-from application.logging import build_stack_data, LogContext
+from application.logging import LogContext, build_stack_data
 
 logger = logging.getLogger(__name__)
 
 MAX_ITERATIONS_REASONING = 10
 
-current_dir = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
-with open(
-    os.path.join(current_dir, "application/prompts", "react_planning_prompt.txt"), "r"
-) as f:
+current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+with open(os.path.join(current_dir, "application/prompts", "react_planning_prompt.txt"), "r") as f:
     PLANNING_PROMPT_TEMPLATE = f.read()
-with open(
-    os.path.join(current_dir, "application/prompts", "react_final_prompt.txt"), "r"
-) as f:
+with open(os.path.join(current_dir, "application/prompts", "react_final_prompt.txt"), "r") as f:
     FINAL_PROMPT_TEMPLATE = f.read()
 
 
@@ -36,20 +31,14 @@ class ReActAgent(BaseAgent):
     def __init__(self, *args, **kwargs):
         super().__init__(*args, **kwargs)
         self.plan: str = ""
-        self.observations: List[str] = []
+        self.observations: list[str] = []
 
-    def _gen_inner(
-        self, query: str, log_context: LogContext
-    ) -> Generator[Dict, None, None]:
+    def _gen_inner(self, query: str, log_context: LogContext) -> Generator[dict, None, None]:
         """Execute ReAct reasoning loop with planning, action, and observation cycles"""
 
         self._reset_state()
 
-        tools_dict = (
-            self._get_tools(self.user_api_key)
-            if self.user_api_key
-            else self._get_user_tools(self.user)
-        )
+        tools_dict = self._get_tools(self.user_api_key) if self.user_api_key else self._get_user_tools(self.user)
         self._prepare_tools(tools_dict)
 
         for iteration in range(1, MAX_ITERATIONS_REASONING + 1):
@@ -58,9 +47,7 @@ class ReActAgent(BaseAgent):
             yield from self._planning_phase(query, log_context)
 
             if not self.plan:
-                logger.warning(
-                    f"ReActAgent: No plan generated in iteration {iteration}"
-                )
+                logger.warning(f"ReActAgent: No plan generated in iteration {iteration}")
                 break
             self.observations.append(f"Plan (iteration {iteration}): {self.plan}")
 
@@ -76,9 +63,7 @@ class ReActAgent(BaseAgent):
         self.plan = ""
         self.observations = []
 
-    def _planning_phase(
-        self, query: str, log_context: LogContext
-    ) -> Generator[Dict, None, None]:
+    def _planning_phase(self, query: str, log_context: LogContext) -> Generator[dict, None, None]:
         """Generate strategic plan for query"""
         logger.info("ReActAgent: Creating plan...")
 
@@ -92,9 +77,7 @@ class ReActAgent(BaseAgent):
         )
 
         if log_context:
-            log_context.stacks.append(
-                {"component": "planning_llm", "data": build_stack_data(self.llm)}
-            )
+            log_context.stacks.append({"component": "planning_llm", "data": build_stack_data(self.llm)})
         plan_parts = []
         for chunk in plan_stream:
             content = self._extract_content(chunk)
@@ -103,9 +86,7 @@ class ReActAgent(BaseAgent):
                 yield {"thought": content}
         self.plan = "".join(plan_parts)
 
-    def _execution_phase(
-        self, query: str, tools_dict: Dict, log_context: LogContext
-    ) -> Generator[bool, None, None]:
+    def _execution_phase(self, query: str, tools_dict: dict, log_context: LogContext) -> Generator[bool, None, None]:
         """Execute plan with tool calls and observations"""
         execution_prompt = self._build_execution_prompt(query)
         messages = self._build_messages(execution_prompt, query)
@@ -115,9 +96,7 @@ class ReActAgent(BaseAgent):
 
         if initial_content:
             self.observations.append(f"Initial response: {initial_content}")
-        processed_response = self._llm_handler(
-            llm_response, tools_dict, messages, log_context
-        )
+        processed_response = self._llm_handler(llm_response, tools_dict, messages, log_context)
 
         for tool_call in self.tool_calls:
             observation = (
@@ -141,23 +120,17 @@ class ReActAgent(BaseAgent):
 
         return "SATISFIED" in (final_content or "")
 
-    def _synthesis_phase(
-        self, query: str, log_context: LogContext
-    ) -> Generator[Dict, None, None]:
+    def _synthesis_phase(self, query: str, log_context: LogContext) -> Generator[dict, None, None]:
         """Synthesize final answer from all observations"""
         logger.info("ReActAgent: Generating final answer...")
 
         final_prompt = self._build_final_answer_prompt(query)
         messages = [{"role": "user", "content": final_prompt}]
 
-        final_stream = self.llm.gen_stream(
-            model=self.gpt_model, messages=messages, tools=None
-        )
+        final_stream = self.llm.gen_stream(model=self.gpt_model, messages=messages, tools=None)
 
         if log_context:
-            log_context.stacks.append(
-                {"component": "final_answer_llm", "data": build_stack_data(self.llm)}
-            )
+            log_context.stacks.append({"component": "final_answer_llm", "data": build_stack_data(self.llm)})
         for chunk in final_stream:
             content = self._extract_content(chunk)
             if content:
@@ -202,37 +175,38 @@ class ReActAgent(BaseAgent):
 
         if isinstance(response, str):
             return response
-        if hasattr(response, "message") and hasattr(response.message, "content"):
-            if response.message.content:
-                return response.message.content
-        if hasattr(response, "choices") and response.choices:
-            if hasattr(response.choices[0], "message"):
-                content = response.choices[0].message.content
-                if content:
-                    return content
-        if hasattr(response, "content") and isinstance(response.content, list):
-            if response.content and hasattr(response.content[0], "text"):
-                return response.content[0].text
+        if hasattr(response, "message") and hasattr(response.message, "content") and response.message.content:
+            return response.message.content
+        if hasattr(response, "choices") and response.choices and hasattr(response.choices[0], "message"):
+            content = response.choices[0].message.content
+            if content:
+                return content
+        if (
+            hasattr(response, "content")
+            and isinstance(response.content, list)
+            and response.content
+            and hasattr(response.content[0], "text")
+        ):
+            return response.content[0].text
         try:
             for chunk in response:
                 content_piece = ""
 
-                if hasattr(chunk, "choices") and chunk.choices:
-                    if hasattr(chunk.choices[0], "delta"):
-                        delta_content = chunk.choices[0].delta.content
-                        if delta_content:
-                            content_piece = delta_content
-                elif hasattr(chunk, "type") and chunk.type == "content_block_delta":
-                    if hasattr(chunk, "delta") and hasattr(chunk.delta, "text"):
-                        content_piece = chunk.delta.text
+                if hasattr(chunk, "choices") and chunk.choices and hasattr(chunk.choices[0], "delta"):
+                    delta_content = chunk.choices[0].delta.content
+                    if delta_content:
+                        content_piece = delta_content
+                elif (
+                    hasattr(chunk, "type")
+                    and chunk.type == "content_block_delta"
+                    and hasattr(chunk, "delta")
+                    and hasattr(chunk.delta, "text")
+                ):
+                    content_piece = chunk.delta.text
                 elif isinstance(chunk, str):
                     content_piece = chunk
                 if content_piece:
                     collected.append(content_piece)
         except (TypeError, AttributeError):
-            logger.debug(
-                f"Response not iterable or unexpected format: {type(response)}"
-            )
-        except Exception as e:
-            logger.error(f"Error extracting content: {e}")
+            logger.debug(f"Response not iterable or unexpected format: {type(response)}")
         return "".join(collected)

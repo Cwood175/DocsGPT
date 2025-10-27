@@ -4,7 +4,7 @@ from application.llm.handlers.openai import OpenAILLMHandler
 
 
 class LLMHandlerCreator:
-    handlers = {
+    handlers: "ClassVar[dict[str, type[LLMHandler]]]" = {
         "openai": OpenAILLMHandler,
         "google": GoogleLLMHandler,
         "default": OpenAILLMHandler,

@@ -3,18 +3,9 @@ import base64
 import json
 import logging
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 from urllib.parse import parse_qs, urlparse
 
-from application.agents.tools.base import Tool
-from application.api.user.tasks import mcp_oauth_status_task, mcp_oauth_task
-from application.cache import get_redis_instance
-
-from application.core.mongo_db import MongoDB
-
-from application.core.settings import settings
-
-from application.security.encryption import decrypt_credentials
 from fastmcp import Client
 from fastmcp.client.auth import BearerAuth
 from fastmcp.client.transports import (
@@ -24,9 +15,18 @@ from fastmcp.client.transports import (
 )
 from mcp.client.auth import OAuthClientProvider, TokenStorage
 from mcp.shared.auth import OAuthClientInformationFull, OAuthClientMetadata, OAuthToken
-
 from pydantic import AnyHttpUrl, ValidationError
 from redis import Redis
+from redis.exceptions import RedisError
+
+from application.agents.tools.base import Tool
+from application.api.user.tasks import mcp_oauth_status_task, mcp_oauth_task
+from application.cache import get_redis_instance
+from application.core.mongo_db import MongoDB
+from application.core.settings import settings
+from application.security.encryption import decrypt_credentials
+
+logger = logging.getLogger(__name__)
 
 mongo = MongoDB.get_client()
 db = mongo[settings.MONGO_DB_NAME]
@@ -40,7 +40,7 @@ class MCPTool(Tool):
     Connect to remote Model Context Protocol (MCP) servers to access dynamic tools and resources.
     """
 
-    def __init__(self, config: Dict[str, Any], user_id: Optional[str] = None):
+    def __init__(self, config: dict[str, Any], user_id: str | None = None):
         """
         Initialize the MCP Tool with configuration.
 
@@ -68,9 +68,7 @@ class MCPTool(Tool):
 
         self.auth_credentials = {}
         if config.get("encrypted_credentials") and user_id:
-            self.auth_credentials = decrypt_credentials(
-                config["encrypted_credentials"], user_id
-            )
+            self.auth_credentials = decrypt_credentials(config["encrypted_credentials"], user_id)
         else:
             self.auth_credentials = config.get("auth_credentials", {})
         self.oauth_scopes = config.get("oauth_scopes", [])
@@ -94,9 +92,7 @@ class MCPTool(Tool):
             scopes_str = ",".join(self.oauth_scopes) if self.oauth_scopes else "none"
             auth_key = f"oauth:{self.oauth_client_name}:{scopes_str}"
         elif self.auth_type in ["bearer"]:
-            token = self.auth_credentials.get(
-                "bearer_token", ""
-            ) or self.auth_credentials.get("access_token", "")
+            token = self.auth_credentials.get("bearer_token", "") or self.auth_credentials.get("access_token", "")
             auth_key = f"bearer:{token[:10]}..." if token else "bearer:none"
         elif self.auth_type == "api_key":
             api_key = self.auth_credentials.get("api_key", "")
@@ -133,9 +129,7 @@ class MCPTool(Tool):
                 user_id=self.user_id,
             )
         elif self.auth_type == "bearer":
-            token = self.auth_credentials.get(
-                "bearer_token", ""
-            ) or self.auth_credentials.get("access_token", "")
+            token = self.auth_credentials.get("bearer_token", "") or self.auth_credentials.get("access_token", "")
             if token:
                 auth = BearerAuth(token)
         self._client = Client(transport, auth=auth)
@@ -158,9 +152,7 @@ class MCPTool(Tool):
             username = self.auth_credentials.get("username", "")
             password = self.auth_credentials.get("password", "")
             if username and password:
-                credentials = base64.b64encode(
-                    f"{username}:{password}".encode()
-                ).decode()
+                credentials = base64.b64encode(f"{username}:{password}".encode()).decode()
                 headers["Authorization"] = f"Basic {credentials}"
         if self.transport_type == "auto":
             if "sse" in self.server_url.lower() or self.server_url.endswith("/sse"):
@@ -182,7 +174,7 @@ class MCPTool(Tool):
         else:
             return StreamableHttpTransport(url=self.server_url, headers=headers)
 
-    def _format_tools(self, tools_response) -> List[Dict]:
+    def _format_tools(self, tools_response) -> list[dict]:
         """Format tools response to match expected format."""
         if hasattr(tools_response, "tools"):
             tools = tools_response.tools
@@ -212,7 +204,7 @@ class MCPTool(Tool):
     async def _execute_with_client(self, operation: str, *args, **kwargs):
         """Execute operation with FastMCP client."""
         if not self._client:
-            raise Exception("FastMCP client not initialized")
+            raise RuntimeError("FastMCP client not initialized")
         async with self._client:
             if operation == "ping":
                 return await self._client.ping()
@@ -229,42 +221,35 @@ class MCPTool(Tool):
             elif operation == "list_prompts":
                 return await self._client.list_prompts()
             else:
-                raise Exception(f"Unknown operation: {operation}")
+                raise ValueError(f"Unknown operation: {operation}")
 
     def _run_async_operation(self, operation: str, *args, **kwargs):
         """Run async operation in sync context."""
         try:
+            asyncio.get_running_loop()
+        except RuntimeError:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
             try:
-                loop = asyncio.get_running_loop()
-                import concurrent.futures
+                return loop.run_until_complete(self._execute_with_client(operation, *args, **kwargs))
+            finally:
+                loop.close()
+        else:
+            import concurrent.futures
 
-                def run_in_thread():
-                    new_loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(new_loop)
-                    try:
-                        return new_loop.run_until_complete(
-                            self._execute_with_client(operation, *args, **kwargs)
-                        )
-                    finally:
-                        new_loop.close()
-
-                with concurrent.futures.ThreadPoolExecutor() as executor:
-                    future = executor.submit(run_in_thread)
-                    return future.result(timeout=self.timeout)
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
+            def run_in_thread():
+                new_loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(new_loop)
                 try:
-                    return loop.run_until_complete(
-                        self._execute_with_client(operation, *args, **kwargs)
-                    )
+                    return new_loop.run_until_complete(self._execute_with_client(operation, *args, **kwargs))
                 finally:
-                    loop.close()
-        except Exception as e:
-            print(f"Error occurred while running async operation: {e}")
-            raise
+                    new_loop.close()
 
-    def discover_tools(self) -> List[Dict]:
+            with concurrent.futures.ThreadPoolExecutor() as executor:
+                future = executor.submit(run_in_thread)
+                return future.result(timeout=self.timeout)
+
+    def discover_tools(self) -> list[dict]:
         """
         Discover available tools from the MCP server using FastMCP.
 
@@ -279,8 +264,8 @@ class MCPTool(Tool):
             tools = self._run_async_operation("list_tools")
             self.available_tools = tools
             return self.available_tools
-        except Exception as e:
-            raise Exception(f"Failed to discover tools from MCP server: {str(e)}")
+        except (ConnectionError, OSError, RuntimeError, TimeoutError, ValueError) as e:
+            raise RuntimeError(f"Failed to discover tools from MCP server: {e!s}") from e
 
     def execute_action(self, action_name: str, **kwargs) -> Any:
         """
@@ -294,7 +279,7 @@ class MCPTool(Tool):
             Result from the MCP server
         """
         if not self.server_url:
-            raise Exception("No MCP server configured")
+            raise RuntimeError("No MCP server configured")
         if not self._client:
             self._setup_client()
         cleaned_kwargs = {}
@@ -303,14 +288,12 @@ class MCPTool(Tool):
                 continue
             cleaned_kwargs[key] = value
         try:
-            result = self._run_async_operation(
-                "call_tool", action_name, **cleaned_kwargs
-            )
+            result = self._run_async_operation("call_tool", action_name, **cleaned_kwargs)
             return self._format_result(result)
-        except Exception as e:
-            raise Exception(f"Failed to execute action '{action_name}': {str(e)}")
+        except (ConnectionError, OSError, RuntimeError, TimeoutError, ValueError) as e:
+            raise RuntimeError(f"Failed to execute action '{action_name}': {e!s}") from e
 
-    def _format_result(self, result) -> Dict:
+    def _format_result(self, result) -> dict:
         """Format FastMCP result to match expected format."""
         if hasattr(result, "content"):
             content_list = []
@@ -320,17 +303,14 @@ class MCPTool(Tool):
                 elif hasattr(content_item, "data"):
                     content_list.append({"type": "data", "data": content_item.data})
                 else:
-                    content_list.append(
-                        {"type": "unknown", "content": str(content_item)}
-                    )
+                    content_list.append({"type": "unknown", "content": str(content_item)})
             return {
                 "content": content_list,
                 "isError": getattr(result, "isError", False),
             }
-        else:
-            return result
+        return result
 
-    def test_connection(self) -> Dict:
+    def test_connection(self) -> dict:
         """
         Test the connection to the MCP server and validate functionality.
 
@@ -351,24 +331,23 @@ class MCPTool(Tool):
         try:
             if self.auth_type == "oauth":
                 return self._test_oauth_connection()
-            else:
-                return self._test_regular_connection()
-        except Exception as e:
+            return self._test_regular_connection()
+        except (ConnectionError, OSError, RuntimeError, TimeoutError, ValueError) as e:
             return {
                 "success": False,
-                "message": f"Connection failed: {str(e)}",
+                "message": f"Connection failed: {e!s}",
                 "tools_count": 0,
                 "transport_type": self.transport_type,
                 "auth_type": self.auth_type,
                 "error_type": type(e).__name__,
             }
 
-    def _test_regular_connection(self) -> Dict:
+    def _test_regular_connection(self) -> dict:
         """Test connection for non-OAuth auth types."""
         try:
             self._run_async_operation("ping")
             ping_success = True
-        except Exception:
+        except (ConnectionError, OSError, RuntimeError, TimeoutError, ValueError):
             ping_success = False
         tools = self.discover_tools()
 
@@ -385,12 +364,12 @@ class MCPTool(Tool):
             "tools": [tool.get("name", "unknown") for tool in tools],
         }
 
-    def _test_oauth_connection(self) -> Dict:
+    def _test_oauth_connection(self) -> dict:
         """Test connection for OAuth auth type with proper async handling."""
         try:
             task = mcp_oauth_task.delay(config=self.config, user=self.user_id)
             if not task:
-                raise Exception("Failed to start OAuth authentication")
+                raise RuntimeError("Failed to start OAuth authentication")
             return {
                 "success": True,
                 "requires_oauth": True,
@@ -398,17 +377,17 @@ class MCPTool(Tool):
                 "status": "pending",
                 "message": "OAuth flow started",
             }
-        except Exception as e:
+        except (ConnectionError, OSError, RuntimeError, TimeoutError, ValueError) as e:
             return {
                 "success": False,
-                "message": f"OAuth connection failed: {str(e)}",
+                "message": f"OAuth connection failed: {e!s}",
                 "tools_count": 0,
                 "transport_type": self.transport_type,
                 "auth_type": self.auth_type,
                 "error_type": type(e).__name__,
             }
 
-    def get_actions_metadata(self) -> List[Dict]:
+    def get_actions_metadata(self) -> list[dict]:
         """
         Get metadata for all available actions.
 
@@ -418,10 +397,7 @@ class MCPTool(Tool):
         actions = []
         for tool in self.available_tools:
             input_schema = (
-                tool.get("inputSchema")
-                or tool.get("input_schema")
-                or tool.get("schema")
-                or tool.get("parameters")
+                tool.get("inputSchema") or tool.get("input_schema") or tool.get("schema") or tool.get("parameters")
             )
 
             parameters_schema = {
@@ -430,20 +406,19 @@ class MCPTool(Tool):
                 "required": [],
             }
 
-            if input_schema:
-                if isinstance(input_schema, dict):
-                    if "properties" in input_schema:
-                        parameters_schema = {
-                            "type": input_schema.get("type", "object"),
-                            "properties": input_schema.get("properties", {}),
-                            "required": input_schema.get("required", []),
-                        }
+            if input_schema and isinstance(input_schema, dict):
+                if "properties" in input_schema:
+                    parameters_schema = {
+                        "type": input_schema.get("type", "object"),
+                        "properties": input_schema.get("properties", {}),
+                        "required": input_schema.get("required", []),
+                    }
 
-                        for key in ["additionalProperties", "description"]:
-                            if key in input_schema:
-                                parameters_schema[key] = input_schema[key]
-                    else:
-                        parameters_schema["properties"] = input_schema
+                    for key in ["additionalProperties", "description"]:
+                        if key in input_schema:
+                            parameters_schema[key] = input_schema[key]
+                else:
+                    parameters_schema["properties"] = input_schema
             action = {
                 "name": tool.get("name", ""),
                 "description": tool.get("description", ""),
@@ -452,7 +427,7 @@ class MCPTool(Tool):
             actions.append(action)
         return actions
 
-    def get_config_requirements(self) -> Dict:
+    def get_config_requirements(self) -> dict:
         """Get configuration requirements for the MCP tool."""
         return {
             "server_url": {
@@ -569,7 +544,7 @@ class DocsGPTOAuth(OAuthClientProvider):
         redirect_uri: str,
         redis_client: Redis | None = None,
         redis_prefix: str = "mcp_oauth:",
-        task_id: str = None,
+        task_id: str | None = None,
         scopes: str | list[str] | None = None,
         client_name: str = "DocsGPT-MCP",
         user_id=None,
@@ -613,9 +588,7 @@ class DocsGPTOAuth(OAuthClientProvider):
             **(additional_client_metadata or {}),
         )
 
-        storage = DBTokenStorage(
-            server_url=self.server_base_url, user_id=self.user_id, db_client=self.db
-        )
+        storage = DBTokenStorage(server_url=self.server_base_url, user_id=self.user_id, db_client=self.db)
 
         super().__init__(
             server_url=self.server_base_url,
@@ -630,32 +603,26 @@ class DocsGPTOAuth(OAuthClientProvider):
 
     def _process_auth_url(self, authorization_url: str) -> tuple[str, str]:
         """Process authorization URL to extract state"""
-        try:
-            parsed_url = urlparse(authorization_url)
-            query_params = parse_qs(parsed_url.query)
+        parsed_url = urlparse(authorization_url)
+        query_params = parse_qs(parsed_url.query)
 
-            state_params = query_params.get("state", [])
-            if state_params:
-                state = state_params[0]
-            else:
-                raise ValueError("No state in auth URL")
-            return authorization_url, state
-        except Exception as e:
-            raise Exception(f"Failed to process auth URL: {e}")
+        state_params = query_params.get("state", [])
+        if not state_params:
+            raise ValueError("No state in auth URL")
+        state = state_params[0]
+        return authorization_url, state
 
     async def redirect_handler(self, authorization_url: str) -> None:
         """Store auth URL and state in Redis for frontend to use."""
         auth_url, state = self._process_auth_url(authorization_url)
-        logging.info(
-            "[DocsGPTOAuth] Processed auth_url: %s, state: %s", auth_url, state
-        )
+        logger.info("[DocsGPTOAuth] Processed auth_url: %s, state: %s", auth_url, state)
         self.auth_url = auth_url
         self.extracted_state = state
 
         if self.redis_client and self.extracted_state:
             key = f"{self.redis_prefix}auth_url:{self.extracted_state}"
             self.redis_client.setex(key, 600, auth_url)
-            logging.info("[DocsGPTOAuth] Stored auth_url in Redis: %s", key)
+            logger.info("[DocsGPTOAuth] Stored auth_url in Redis: %s", key)
 
             if self.task_id:
                 status_key = f"mcp_oauth_status:{self.task_id}"
@@ -672,7 +639,7 @@ class DocsGPTOAuth(OAuthClientProvider):
     async def callback_handler(self) -> tuple[str, str | None]:
         """Wait for auth code from Redis using the state value."""
         if not self.redis_client or not self.extracted_state:
-            raise Exception("Redis client or state not configured for OAuth")
+            raise RuntimeError("Redis client or state not configured for OAuth")
         poll_interval = 1
         max_wait_time = 300
         code_key = f"{self.redis_prefix}code:{self.extracted_state}"
@@ -696,12 +663,8 @@ class DocsGPTOAuth(OAuthClientProvider):
                 returned_state = self.extracted_state
 
                 self.redis_client.delete(code_key)
-                self.redis_client.delete(
-                    f"{self.redis_prefix}auth_url:{self.extracted_state}"
-                )
-                self.redis_client.delete(
-                    f"{self.redis_prefix}state:{self.extracted_state}"
-                )
+                self.redis_client.delete(f"{self.redis_prefix}auth_url:{self.extracted_state}")
+                self.redis_client.delete(f"{self.redis_prefix}state:{self.extracted_state}")
 
                 if self.task_id:
                     status_data = {
@@ -716,17 +679,13 @@ class DocsGPTOAuth(OAuthClientProvider):
             if error_data:
                 error_msg = error_data.decode()
                 self.redis_client.delete(error_key)
-                self.redis_client.delete(
-                    f"{self.redis_prefix}auth_url:{self.extracted_state}"
-                )
-                self.redis_client.delete(
-                    f"{self.redis_prefix}state:{self.extracted_state}"
-                )
-                raise Exception(f"OAuth error: {error_msg}")
+                self.redis_client.delete(f"{self.redis_prefix}auth_url:{self.extracted_state}")
+                self.redis_client.delete(f"{self.redis_prefix}state:{self.extracted_state}")
+                raise RuntimeError(f"OAuth error: {error_msg}")
             await asyncio.sleep(poll_interval)
         self.redis_client.delete(f"{self.redis_prefix}auth_url:{self.extracted_state}")
         self.redis_client.delete(f"{self.redis_prefix}state:{self.extracted_state}")
-        raise Exception("OAuth callback timeout: no code received within 5 minutes")
+        raise TimeoutError("OAuth callback timeout: no code received within 5 minutes")
 
 
 class DBTokenStorage(TokenStorage):
@@ -755,7 +714,7 @@ class DBTokenStorage(TokenStorage):
             tokens = OAuthToken.model_validate(doc["tokens"])
             return tokens
         except ValidationError as e:
-            logging.error(f"Could not load tokens: {e}")
+            logger.error("Could not load tokens: %s", e)
             return None
 
     async def set_tokens(self, tokens: OAuthToken) -> None:
@@ -765,7 +724,7 @@ class DBTokenStorage(TokenStorage):
             {"$set": {"tokens": tokens.model_dump()}},
             True,
         )
-        logging.info(f"Saved tokens for {self.get_base_url(self.server_url)}")
+        logger.info("Saved tokens for %s", self.get_base_url(self.server_url))
 
     async def get_client_info(self) -> OAuthClientInformationFull | None:
         doc = await asyncio.to_thread(self.collection.find_one, self.get_db_key())
@@ -775,9 +734,7 @@ class DBTokenStorage(TokenStorage):
             client_info = OAuthClientInformationFull.model_validate(doc["client_info"])
             tokens = await self.get_tokens()
             if tokens is None:
-                logging.debug(
-                    "No tokens found, clearing client info to force fresh registration."
-                )
+                logger.debug("No tokens found, clearing client info to force fresh registration.")
                 await asyncio.to_thread(
                     self.collection.update_one,
                     self.get_db_key(),
@@ -786,7 +743,7 @@ class DBTokenStorage(TokenStorage):
                 return None
             return client_info
         except ValidationError as e:
-            logging.error(f"Could not load client info: {e}")
+            logger.error("Could not load client info: %s", e)
             return None
 
     def _serialize_client_info(self, info: dict) -> dict:
@@ -802,17 +759,17 @@ class DBTokenStorage(TokenStorage):
             {"$set": {"client_info": serialized_info}},
             True,
         )
-        logging.info(f"Saved client info for {self.get_base_url(self.server_url)}")
+        logger.info("Saved client info for %s", self.get_base_url(self.server_url))
 
     async def clear(self) -> None:
         await asyncio.to_thread(self.collection.delete_one, self.get_db_key())
-        logging.info(f"Cleared OAuth cache for {self.get_base_url(self.server_url)}")
+        logger.info("Cleared OAuth cache for %s", self.get_base_url(self.server_url))
 
     @classmethod
     async def clear_all(cls, db_client) -> None:
         collection = db_client["connector_sessions"]
         await asyncio.to_thread(collection.delete_many, {})
-        logging.info("Cleared all OAuth client cache data.")
+        logger.info("Cleared all OAuth client cache data.")
 
 
 class MCPOAuthManager:
@@ -822,9 +779,7 @@ class MCPOAuthManager:
         self.redis_client = redis_client
         self.redis_prefix = redis_prefix
 
-    def handle_oauth_callback(
-        self, state: str, code: str, error: Optional[str] = None
-    ) -> bool:
+    def handle_oauth_callback(self, state: str, code: str, error: str | None = None) -> bool:
         """
         Handle OAuth callback from provider.
 
@@ -838,11 +793,11 @@ class MCPOAuthManager:
         """
         try:
             if not self.redis_client or not state:
-                raise Exception("Redis client or state not provided")
+                raise RuntimeError("Redis client or state not provided")
             if error:
                 error_key = f"{self.redis_prefix}error:{state}"
                 self.redis_client.setex(error_key, 300, error)
-                raise Exception(f"OAuth error received: {error}")
+                raise RuntimeError(f"OAuth error received: {error}")
             code_key = f"{self.redis_prefix}code:{state}"
             self.redis_client.setex(code_key, 300, code)
 
@@ -850,11 +805,11 @@ class MCPOAuthManager:
             self.redis_client.setex(state_key, 300, "completed")
 
             return True
-        except Exception as e:
-            logging.error(f"Error handling OAuth callback: {e}")
+        except (RedisError, RuntimeError) as e:
+            logger.error("Error handling OAuth callback: %s", e)
             return False
 
-    def get_oauth_status(self, task_id: str) -> Dict[str, Any]:
+    def get_oauth_status(self, task_id: str) -> dict[str, Any]:
         """Get current status of OAuth flow using provided task_id."""
         if not task_id:
             return {"status": "not_started", "message": "OAuth flow not started"}

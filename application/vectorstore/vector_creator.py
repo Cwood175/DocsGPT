@@ -1,19 +1,21 @@
-from application.vectorstore.faiss import FaissStore
+from typing import ClassVar
+
 from application.vectorstore.elasticsearch import ElasticsearchStore
+from application.vectorstore.faiss import FaissStore
 from application.vectorstore.milvus import MilvusStore
 from application.vectorstore.mongodb import MongoDBVectorStore
-from application.vectorstore.qdrant import QdrantStore
 from application.vectorstore.pgvector import PGVectorStore
+from application.vectorstore.qdrant import QdrantStore
 
 
 class VectorCreator:
-    vectorstores = {
+    vectorstores: ClassVar[dict[str, type]] = {
         "faiss": FaissStore,
         "elasticsearch": ElasticsearchStore,
         "mongodb": MongoDBVectorStore,
         "qdrant": QdrantStore,
         "milvus": MilvusStore,
-        "pgvector": PGVectorStore
+        "pgvector": PGVectorStore,
     }
 
     @classmethod

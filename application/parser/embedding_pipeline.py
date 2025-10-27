@@ -1,24 +1,29 @@
-import os
+#!/usr/bin/env python3
 import logging
+import os
+
 from retry import retry
 from tqdm import tqdm
+
 from application.core.settings import settings
 from application.vectorstore.vector_creator import VectorCreator
+
+logger = logging.getLogger(__name__)
 
 
 def sanitize_content(content: str) -> str:
     """
     Remove NUL characters that can cause vector store ingestion to fail.
-    
+
     Args:
         content (str): Raw content that may contain NUL characters
-        
+
     Returns:
         str: Sanitized content with NUL characters removed
     """
     if not content:
         return content
-    return content.replace('\x00', '')
+    return content.replace("\x00", "")
 
 
 @retry(tries=10, delay=60)
@@ -33,11 +38,11 @@ def add_text_to_store_with_retry(store, doc, source_id):
     try:
         # Sanitize content to remove NUL characters that cause ingestion failures
         doc.page_content = sanitize_content(doc.page_content)
-        
+
         doc.metadata["source_id"] = str(source_id)
         store.add_texts([doc.page_content], metadatas=[doc.metadata])
-    except Exception as e:
-        logging.error(f"Failed to add document with retry: {e}", exc_info=True)
+    except Exception:
+        logger.exception("Failed to add document with retry")
         raise
 
 
@@ -92,13 +97,13 @@ def embed_and_store_documents(docs, folder_name, source_id, task_status):
 
             # Add document to vector store
             add_text_to_store_with_retry(store, doc, source_id)
-        except Exception as e:
-            logging.error(f"Error embedding document {idx}: {e}", exc_info=True)
-            logging.info(f"Saving progress at document {idx} out of {total_docs}")
+        except (ConnectionError, OSError, RuntimeError, TypeError, ValueError):
+            logger.exception("Error embedding document %s", idx)
+            logger.info("Saving progress at document %s out of %s", idx, total_docs)
             store.save_local(folder_name)
             break
 
     # Save the vector store
     if settings.VECTOR_STORE == "faiss":
         store.save_local(folder_name)
-    logging.info("Vector store saved successfully.")
+    logger.info("Vector store saved successfully.")

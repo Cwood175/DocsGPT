@@ -9,7 +9,6 @@ from werkzeug.utils import secure_filename
 
 from application.core.settings import settings
 
-
 _encoding = None
 
 
@@ -42,7 +41,7 @@ def safe_filename(filename):
     # If secure_filename returns just the extension or an empty string
 
     if not safe_name or safe_name == extension.lstrip("."):
-        return f"{str(uuid.uuid4())}{extension}"
+        return f"{uuid.uuid4()}{extension}"
     return safe_name
 
 
@@ -74,12 +73,8 @@ def count_tokens_docs(docs):
     return tokens
 
 
-def calculate_doc_token_budget(
-    gpt_model: str = "gpt-4o", history_token_limit: int = 2000
-) -> int:
-    total_context = settings.LLM_TOKEN_LIMITS.get(
-        gpt_model, settings.DEFAULT_LLM_TOKEN_LIMIT
-    )
+def calculate_doc_token_budget(gpt_model: str = "gpt-4o", history_token_limit: int = 2000) -> int:
+    total_context = settings.LLM_TOKEN_LIMITS.get(gpt_model, settings.DEFAULT_LLM_TOKEN_LIMIT)
     reserved = sum(settings.RESERVED_TOKENS.values())
     doc_budget = total_context - history_token_limit - reserved
     return max(doc_budget, 1000)
@@ -127,16 +122,10 @@ def validate_required_fields(data, required_fields):
     if errors_dict:
         errors = []
         if errors_dict["missing_fields"]:
-            errors.append(
-                f"Missing required fields: {', '.join(errors_dict['missing_fields'])}"
-            )
+            errors.append(f"Missing required fields: {', '.join(errors_dict['missing_fields'])}")
         if errors_dict["empty_fields"]:
-            errors.append(
-                f"Empty values in required fields: {', '.join(errors_dict['empty_fields'])}"
-            )
-        return make_response(
-            jsonify({"success": False, "message": " | ".join(errors)}), 400
-        )
+            errors.append(f"Empty values in required fields: {', '.join(errors_dict['empty_fields'])}")
+        return make_response(jsonify({"success": False, "message": " | ".join(errors)}), 400)
     return None
 
 
@@ -151,8 +140,7 @@ def limit_chat_history(history, max_token_limit=None, gpt_model="docsgpt"):
     max_token_limit = (
         max_token_limit
         if max_token_limit
-        and max_token_limit
-        < settings.LLM_TOKEN_LIMITS.get(gpt_model, settings.DEFAULT_LLM_TOKEN_LIMIT)
+        and max_token_limit < settings.LLM_TOKEN_LIMITS.get(gpt_model, settings.DEFAULT_LLM_TOKEN_LIMIT)
         else settings.LLM_TOKEN_LIMITS.get(gpt_model, settings.DEFAULT_LLM_TOKEN_LIMIT)
     )
 
@@ -180,15 +168,11 @@ def limit_chat_history(history, max_token_limit=None, gpt_model="docsgpt"):
 
 def validate_function_name(function_name):
     """Validate function name matches allowed pattern (alphanumeric, underscore, hyphen)."""
-    if not re.match(r"^[a-zA-Z0-9_-]+$", function_name):
-        return False
-    return True
+    return re.match(r"^[a-zA-Z0-9_-]+$", function_name) is not None
 
 
 def generate_image_url(image_path):
-    if isinstance(image_path, str) and (
-        image_path.startswith("http://") or image_path.startswith("https://")
-    ):
+    if isinstance(image_path, str) and image_path.startswith(("http://", "https://")):
         return image_path
     strategy = getattr(settings, "URL_STRATEGY", "backend")
     if strategy == "s3":

@@ -1,15 +1,24 @@
+#!/usr/bin/env python3
+
 import datetime
 import json
 import logging
+
+logger = logging.getLogger(__name__)
+
+logger = logging.getLogger(__name__)
+
+logger = logging.getLogger(__name__)
+
+logger = logging.getLogger(__name__)
 import mimetypes
 import os
 import shutil
 import string
 import tempfile
-from typing import Any, Dict
 import zipfile
-
 from collections import Counter
+from typing import Any
 from urllib.parse import urljoin
 
 import requests
@@ -18,7 +27,6 @@ from bson.objectid import ObjectId
 
 from application.agents.agent_creator import AgentCreator
 from application.api.answer.services.stream_processor import get_prompt
-
 from application.cache import get_redis_instance
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
@@ -29,13 +37,19 @@ from application.parser.file.bulk import SimpleDirectoryReader
 from application.parser.remote.remote_creator import RemoteCreator
 from application.parser.schema.base import Document
 from application.retriever.retriever_creator import RetrieverCreator
-
 from application.storage.storage_creator import StorageCreator
 from application.utils import count_tokens_docs, num_tokens_from_string
+
+logger = logging.getLogger(__name__)
 
 mongo = MongoDB.get_client()
 db = mongo[settings.MONGO_DB_NAME]
 sources_collection = db["sources"]
+logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
+logger = logging.getLogger(__name__)
 
 # Constants
 
@@ -59,9 +73,10 @@ def generate_random_string(length):
     return "".join([string.ascii_letters[i % 52] for i in range(length)])
 
 
-current_dir = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
+current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+
+logger = logging.getLogger(__name__)
 
 
 def extract_zip_recursive(zip_path, extract_to, current_depth=0, max_depth=5):
@@ -75,14 +90,14 @@ def extract_zip_recursive(zip_path, extract_to, current_depth=0, max_depth=5):
         max_depth (int): Maximum allowed depth of recursion to prevent infinite loops.
     """
     if current_depth > max_depth:
-        logging.warning(f"Reached maximum recursion depth of {max_depth}")
+        logger.warning("Reached maximum recursion depth of %s", max_depth)
         return
     try:
         with zipfile.ZipFile(zip_path, "r") as zip_ref:
             zip_ref.extractall(extract_to)
         os.remove(zip_path)  # Remove the zip file after extracting
     except Exception as e:
-        logging.error(f"Error extracting zip file {zip_path}: {e}", exc_info=True)
+        logger.error("Error extracting zip file %s: %s", zip_path, e, exc_info=True)
         return
     # Check for nested zip files and extract them
 
@@ -96,14 +111,18 @@ def extract_zip_recursive(zip_path, extract_to, current_depth=0, max_depth=5):
 
 
 def download_file(url, params, dest_path):
+    logger = logging.getLogger(__name__)
     try:
         response = requests.get(url, params=params)
         response.raise_for_status()
         with open(dest_path, "wb") as f:
             f.write(response.content)
     except requests.RequestException as e:
-        logging.error(f"Error downloading file: {e}")
+        logger.error(f"Error downloading file: {e}")
         raise
+
+
+logger = logging.getLogger(__name__)
 
 
 def upload_index(full_path, file_data):
@@ -114,11 +133,11 @@ def upload_index(full_path, file_data):
             pkl_path = full_path + "/index.pkl"
 
             if not os.path.exists(faiss_path):
-                logging.error(f"FAISS index file not found: {faiss_path}")
+                logger.error(f"FAISS index file not found: {faiss_path}")
                 raise FileNotFoundError(f"FAISS index file not found: {faiss_path}")
 
             if not os.path.exists(pkl_path):
-                logging.error(f"FAISS pickle file not found: {pkl_path}")
+                logger.error(f"FAISS pickle file not found: {pkl_path}")
                 raise FileNotFoundError(f"FAISS pickle file not found: {pkl_path}")
 
             files = {
@@ -131,17 +150,18 @@ def upload_index(full_path, file_data):
                 data=file_data,
             )
         else:
-            response = requests.post(
-                urljoin(settings.API_URL, "/api/upload_index"), data=file_data
-            )
+            response = requests.post(urljoin(settings.API_URL, "/api/upload_index"), data=file_data)
         response.raise_for_status()
     except (requests.RequestException, FileNotFoundError) as e:
-        logging.error(f"Error uploading index: {e}")
+        logger.error(f"Error uploading index: {e}")
         raise
     finally:
         if settings.VECTOR_STORE == "faiss" and files is not None:
             for file in files.values():
                 file.close()
+
+
+logger = logging.getLogger(__name__)
 
 
 def run_agent_logic(agent_config, input_data):
@@ -205,19 +225,26 @@ def run_agent_logic(agent_config, input_data):
             "tool_calls": tool_calls,
             "thought": thought,
         }
-        logging.info(f"Agent response: {result}")
+        logger.info("Agent response: %s", result)
         return result
     except Exception as e:
-        logging.error(f"Error in run_agent_logic: {e}", exc_info=True)
+        logger.error("Error in run_agent_logic: %s", e, exc_info=True)
         raise
 
 
 # Define the main function for ingesting and processing documents.
 
 
-def ingest_worker(
-    self, directory, formats, job_name, file_path, filename, user, retriever="classic"
-):
+logger = logging.getLogger(__name__)
+
+
+logger = logging.getLogger(__name__)
+
+
+logger = logging.getLogger(__name__)
+
+
+def ingest_worker(self, directory, formats, job_name, file_path, filename, user, retriever="classic"):
     """
     Ingest and process documents.
 
@@ -242,7 +269,7 @@ def ingest_worker(
 
     storage = StorageCreator.get_storage()
 
-    logging.info(f"Ingest path: {file_path}", extra={"user": user, "job": job_name})
+    logger.info(f"Ingest path: {file_path}", extra={"user": user, "job": job_name})
 
     # Create temporary working directory
 
@@ -270,10 +297,8 @@ def ingest_worker(
                         file_data = storage.get_file(storage_file_path)
                         with open(local_file_path, "wb") as f:
                             f.write(file_data.read())
-                    except Exception as e:
-                        logging.error(
-                            f"Error downloading file {storage_file_path}: {e}"
-                        )
+                    except OSError as e:
+                        logger.error(f"Error downloading file {storage_file_path}: {e}")
                         continue
             else:
                 # Handle single file case
@@ -286,7 +311,7 @@ def ingest_worker(
 
                 # Handle zip files
                 if temp_filename.endswith(".zip"):
-                    logging.info(f"Extracting zip file: {temp_filename}")
+                    logger.info(f"Extracting zip file: {temp_filename}")
                     extract_zip_recursive(
                         temp_file_path,
                         temp_dir,
@@ -308,7 +333,7 @@ def ingest_worker(
             raw_docs = reader.load_data()
 
             directory_structure = getattr(reader, "directory_structure", {})
-            logging.info(f"Directory structure from reader: {directory_structure}")
+            logger.info(f"Directory structure from reader: {directory_structure}")
 
             chunker = Chunker(
                 chunking_strategy="classic_chunk",
@@ -333,7 +358,7 @@ def ingest_worker(
 
             if sample:
                 for i in range(min(5, len(raw_docs))):
-                    logging.info(f"Sample document {i}: {raw_docs[i]}")
+                    logger.info(f"Sample document {i}: {raw_docs[i]}")
             file_data = {
                 "name": job_name,
                 "file": filename,
@@ -348,7 +373,7 @@ def ingest_worker(
 
             upload_index(vector_store_path, file_data)
         except Exception as e:
-            logging.error(f"Error in ingest_worker: {e}", exc_info=True)
+            logger.error(f"Error in ingest_worker: {e}", exc_info=True)
             raise
     return {
         "directory": directory,
@@ -358,6 +383,18 @@ def ingest_worker(
         "user": user,  # Use original user
         "limited": False,
     }
+
+
+logger = logging.getLogger(__name__)
+
+
+logger = logging.getLogger(__name__)
+
+
+logger = logging.getLogger(__name__)
+
+
+logger = logging.getLogger(__name__)
 
 
 def reingest_source_worker(self, source_id, user):
@@ -389,9 +426,7 @@ def reingest_source_worker(self, source_id, user):
         storage = StorageCreator.get_storage()
         source_file_path = source.get("file_path", "")
 
-        self.update_state(
-            state="PROGRESS", meta={"current": 20, "status": "Scanning current files"}
-        )
+        self.update_state(state="PROGRESS", meta={"current": 20, "status": "Scanning current files"})
 
         with tempfile.TemporaryDirectory() as temp_dir:
             # Download all files from storage to temp directory, preserving directory structure
@@ -412,10 +447,8 @@ def reingest_source_worker(self, source_id, user):
                         file_data = storage.get_file(storage_file_path)
                         with open(local_file_path, "wb") as f:
                             f.write(file_data.read())
-                    except Exception as e:
-                        logging.error(
-                            f"Error downloading file {storage_file_path}: {e}"
-                        )
+                    except OSError as e:
+                        logger.error(f"Error downloading file {storage_file_path}: {e}")
                         continue
 
             reader = SimpleDirectoryReader(
@@ -443,33 +476,25 @@ def reingest_source_worker(self, source_id, user):
             )
             reader.load_data()
             directory_structure = reader.directory_structure
-            logging.info(
-                f"Directory structure built with token counts: {directory_structure}"
-            )
+            logger.info(f"Directory structure built with token counts: {directory_structure}")
 
             try:
                 old_directory_structure = source.get("directory_structure") or {}
                 if isinstance(old_directory_structure, str):
                     try:
                         old_directory_structure = json.loads(old_directory_structure)
-                    except Exception:
+                    except json.JSONDecodeError:
                         old_directory_structure = {}
 
                 def _flatten_directory_structure(struct, prefix=""):
                     files = set()
                     if isinstance(struct, dict):
                         for name, meta in struct.items():
-                            current_path = (
-                                os.path.join(prefix, name) if prefix else name
-                            )
-                            if isinstance(meta, dict) and (
-                                "type" in meta and "size_bytes" in meta
-                            ):
+                            current_path = os.path.join(prefix, name) if prefix else name
+                            if isinstance(meta, dict) and ("type" in meta and "size_bytes" in meta):
                                 files.add(current_path)
                             elif isinstance(meta, dict):
-                                files |= _flatten_directory_structure(
-                                    meta, current_path
-                                )
+                                files |= _flatten_directory_structure(meta, current_path)
                     return files
 
                 old_files = _flatten_directory_structure(old_directory_structure)
@@ -488,10 +513,8 @@ def reingest_source_worker(self, source_id, user):
                 else:
                     logging.info("No files removed since last ingest.")
 
-            except Exception as e:
-                logging.error(
-                    f"Error comparing directory structures: {e}", exc_info=True
-                )
+            except (TypeError, ValueError) as e:
+                logging.getLogger(__name__).error(f"Error comparing directory structures: {e}", exc_info=True)
                 added_files = []
                 removed_files = []
             try:
@@ -521,11 +544,7 @@ def reingest_source_worker(self, source_id, user):
                 if removed_files:
                     try:
                         for ch in vector_store.get_chunks() or []:
-                            metadata = (
-                                ch.get("metadata", {})
-                                if isinstance(ch, dict)
-                                else getattr(ch, "metadata", {})
-                            )
+                            metadata = ch.get("metadata", {}) if isinstance(ch, dict) else getattr(ch, "metadata", {})
                             raw_source = metadata.get("source")
 
                             source_file = str(raw_source) if raw_source else ""
@@ -536,14 +555,10 @@ def reingest_source_worker(self, source_id, user):
                                     try:
                                         vector_store.delete_chunk(cid)
                                         deleted += 1
-                                    except Exception as de:
-                                        logging.error(
-                                            f"Failed deleting chunk {cid}: {de}"
-                                        )
-                        logging.info(
-                            f"Deleted {deleted} chunks from {len(removed_files)} removed files"
-                        )
-                    except Exception as e:
+                                    except (KeyError, ValueError, RuntimeError) as de:
+                                        logger.error(f"Failed deleting chunk {cid}: {de}")
+                        logging.info(f"Deleted {deleted} chunks from {len(removed_files)} removed files")
+                    except (AttributeError, KeyError, TypeError, ValueError) as e:
                         logging.error(
                             f"Error during deletion of removed file chunks: {e}",
                             exc_info=True,
@@ -581,32 +596,24 @@ def reingest_source_worker(self, source_id, user):
                                 token_count,
                             ) in reader_new.file_token_counts.items():
                                 try:
-                                    rel_path = os.path.relpath(
-                                        file_path, start=temp_dir
-                                    )
+                                    rel_path = os.path.relpath(file_path, start=temp_dir)
                                     path_parts = rel_path.split(os.sep)
                                     current_dir = directory_structure
 
                                     for part in path_parts[:-1]:
-                                        if part in current_dir and isinstance(
-                                            current_dir[part], dict
-                                        ):
+                                        if part in current_dir and isinstance(current_dir[part], dict):
                                             current_dir = current_dir[part]
                                         else:
                                             break
 
                                     filename = path_parts[-1]
-                                    if filename in current_dir and isinstance(
-                                        current_dir[filename], dict
-                                    ):
-                                        current_dir[filename][
-                                            "token_count"
-                                        ] = token_count
-                                        logging.info(
+                                    if filename in current_dir and isinstance(current_dir[filename], dict):
+                                        current_dir[filename]["token_count"] = token_count
+                                        logging.getLogger(__name__).info(
                                             f"Updated token count for {rel_path}: {token_count}"
                                         )
                                 except Exception as e:
-                                    logging.warning(
+                                    logging.getLogger(__name__).warning(
                                         f"Could not update token count for {file_path}: {e}"
                                     )
 
@@ -614,24 +621,16 @@ def reingest_source_worker(self, source_id, user):
                                 meta = dict(d.extra_info or {})
                                 try:
                                     raw_src = meta.get("source")
-                                    if isinstance(raw_src, str) and os.path.isabs(
-                                        raw_src
-                                    ):
-                                        meta["source"] = os.path.relpath(
-                                            raw_src, start=temp_dir
-                                        )
-                                except Exception:
+                                    if isinstance(raw_src, str) and os.path.isabs(raw_src):
+                                        meta["source"] = os.path.relpath(raw_src, start=temp_dir)
+                                except (OSError, ValueError):
                                     pass
 
                                 vector_store.add_chunk(d.text, metadata=meta)
                                 added += 1
-                            logging.info(
-                                f"Added {added} chunks from {len(added_files)} new files"
-                            )
-                    except Exception as e:
-                        logging.error(
-                            f"Error during ingestion of new files: {e}", exc_info=True
-                        )
+                            logging.getLogger(__name__).info(f"Added {added} chunks from {len(added_files)} new files")
+                    except (OSError, ValueError, TypeError, KeyError, AttributeError) as e:
+                        logger.error(f"Error during ingestion of new files: {e}", exc_info=True)
 
                 # 3) Update source directory structure timestamp
                 try:
@@ -642,15 +641,13 @@ def reingest_source_worker(self, source_id, user):
                         {
                             "$set": {
                                 "directory_structure": directory_structure,
-                                "date": datetime.datetime.now(),
+                                "date": datetime.datetime.now(datetime.UTC),
                                 "tokens": total_tokens,
                             }
                         },
                     )
                 except Exception as e:
-                    logging.error(
-                        f"Error updating directory_structure in DB: {e}", exc_info=True
-                    )
+                    logger.error(f"Error updating directory_structure in DB: {e}", exc_info=True)
 
                 self.update_state(
                     state="PROGRESS",
@@ -667,14 +664,15 @@ def reingest_source_worker(self, source_id, user):
                     "chunks_deleted": deleted,
                 }
             except Exception as e:
-                logging.error(
-                    f"Error while processing file changes: {e}", exc_info=True
-                )
+                logging.error(f"Error while processing file changes: {e}", exc_info=True)
                 raise
 
-    except Exception as e:
+    except (OSError, ValueError, TypeError, KeyError) as e:
         logging.error(f"Error in reingest_source_worker: {e}", exc_info=True)
         raise
+
+
+logger = logging.getLogger(__name__)
 
 
 def remote_worker(
@@ -694,7 +692,7 @@ def remote_worker(
         os.makedirs(full_path)
     self.update_state(state="PROGRESS", meta={"current": 1})
     try:
-        logging.info("Initializing remote loader with type: %s", loader)
+        logger.info("Initializing remote loader with type: %s", loader)
         remote_loader = RemoteCreator.create_loader(loader)
         raw_docs = remote_loader.load_data(source_data)
 
@@ -707,14 +705,14 @@ def remote_worker(
         docs = chunker.chunk(documents=raw_docs)
         docs = [Document.to_langchain_format(raw_doc) for raw_doc in raw_docs]
         tokens = count_tokens_docs(docs)
-        logging.info("Total tokens calculated: %d", tokens)
+        logger.info("Total tokens calculated: %d", tokens)
 
         if operation_mode == "upload":
             id = ObjectId()
             embed_and_store_documents(docs, full_path, id, self)
         elif operation_mode == "sync":
             if not doc_id or not ObjectId.is_valid(doc_id):
-                logging.error("Invalid doc_id provided for sync operation: %s", doc_id)
+                logger.error("Invalid doc_id provided for sync operation: %s", doc_id)
                 raise ValueError("doc_id must be provided for sync operation.")
             id = ObjectId(doc_id)
             embed_and_store_documents(docs, full_path, id, self)
@@ -732,15 +730,15 @@ def remote_worker(
         }
 
         if operation_mode == "sync":
-            file_data["last_sync"] = datetime.datetime.now()
+            file_data["last_sync"] = datetime.datetime.now(datetime.UTC)
         upload_index(full_path, file_data)
     except Exception as e:
-        logging.error("Error in remote_worker task: %s", str(e), exc_info=True)
+        logger.error("Error in remote_worker task: %s", str(e), exc_info=True)
         raise
     finally:
         if os.path.exists(full_path):
             shutil.rmtree(full_path)
-    logging.info("remote_worker task completed successfully")
+    logger.info("remote_worker task completed successfully")
     return {
         "id": str(id),
         "urls": source_data,
@@ -775,7 +773,7 @@ def sync(
             doc_id,
         )
     except Exception as e:
-        logging.error(f"Error during sync: {e}", exc_info=True)
+        logging.getLogger(__name__).error(f"Error during sync: {e}", exc_info=True)
         return {"status": "error", "error": str(e)}
     return {"status": "success"}
 
@@ -791,17 +789,10 @@ def sync_worker(self, frequency):
             source_data = doc.get("remote_data")
             retriever = doc.get("retriever")
             doc_id = str(doc.get("_id"))
-            resp = sync(
-                self, source_data, name, user, source_type, frequency, retriever, doc_id
-            )
+            resp = sync(self, source_data, name, user, source_type, frequency, retriever, doc_id)
             sync_counts["total_sync_count"] += 1
-            sync_counts[
-                "sync_success" if resp["status"] == "success" else "sync_failure"
-            ] += 1
-    return {
-        key: sync_counts[key]
-        for key in ["total_sync_count", "sync_success", "sync_failure"]
-    }
+            sync_counts["sync_success" if resp["status"] == "success" else "sync_failure"] += 1
+    return {key: sync_counts[key] for key in ["total_sync_count", "sync_success", "sync_failure"]}
 
 
 def attachment_worker(self, file_info, user):
@@ -822,17 +813,15 @@ def attachment_worker(self, file_info, user):
         self.update_state(state="PROGRESS", meta={"current": 10})
         storage = StorageCreator.get_storage()
 
-        self.update_state(
-            state="PROGRESS", meta={"current": 30, "status": "Processing content"}
-        )
+        self.update_state(state="PROGRESS", meta={"current": 30, "status": "Processing content"})
 
         content = storage.process_file(
             relative_path,
-            lambda local_path, **kwargs: SimpleDirectoryReader(
-                input_files=[local_path], exclude_hidden=True, errors="ignore"
-            )
-            .load_data()[0]
-            .text,
+            lambda local_path, **kwargs: (
+                SimpleDirectoryReader(input_files=[local_path], exclude_hidden=True, errors="ignore")
+                .load_data()[0]
+                .text
+            ),
         )
 
         token_count = num_tokens_from_string(content)
@@ -840,9 +829,7 @@ def attachment_worker(self, file_info, user):
             content = content[:250000]
             token_count = num_tokens_from_string(content)
 
-        self.update_state(
-            state="PROGRESS", meta={"current": 80, "status": "Storing in database"}
-        )
+        self.update_state(state="PROGRESS", meta={"current": 80, "status": "Storing in database"})
 
         mime_type = mimetypes.guess_type(filename)[0] or "application/octet-stream"
 
@@ -856,14 +843,12 @@ def attachment_worker(self, file_info, user):
                 "content": content,
                 "token_count": token_count,
                 "mime_type": mime_type,
-                "date": datetime.datetime.now(),
+                "date": datetime.datetime.now(datetime.UTC),
                 "metadata": metadata,
             }
         )
 
-        logging.info(
-            f"Stored attachment with ID: {attachment_id}", extra={"user": user}
-        )
+        logging.info(f"Stored attachment with ID: {attachment_id}", extra={"user": user})
 
         self.update_state(state="PROGRESS", meta={"current": 100, "status": "Complete"})
 
@@ -876,7 +861,7 @@ def attachment_worker(self, file_info, user):
             "metadata": metadata,
         }
     except Exception as e:
-        logging.error(
+        logging.getLogger(__name__).error(
             f"Error processing file {filename}: {e}",
             extra={"user": user},
             exc_info=True,
@@ -907,20 +892,18 @@ def agent_webhook_worker(self, agent_id, payload):
         if not agent_config:
             raise ValueError(f"Agent with ID {agent_id} not found.")
         input_data = json.dumps(payload)
-    except Exception as e:
-        logging.error(f"Error processing agent webhook: {e}", exc_info=True)
+    except (ValueError, TypeError, PyMongoError) as e:
+        logging.exception(f"Error processing agent webhook: {e}")
         return {"status": "error", "error": str(e)}
     self.update_state(state="PROGRESS", meta={"current": 50})
     try:
         result = run_agent_logic(agent_config, input_data)
-    except Exception as e:
-        logging.error(f"Error running agent logic: {e}", exc_info=True)
+    except (ValueError, TypeError, KeyError) as e:
+        logging.exception(f"Error running agent logic: {e}")
         return {"status": "error", "error": str(e)}
     finally:
         self.update_state(state="PROGRESS", meta={"current": 100})
-        logging.info(
-            f"Webhook processed for agent {agent_id}", extra={"agent_id": agent_id}
-        )
+        logging.getLogger(__name__).info(f"Webhook processed for agent {agent_id}", extra={"agent_id": agent_id})
         return {"status": "success", "result": result}
 
 
@@ -937,7 +920,7 @@ def ingest_connector(
     operation_mode: str = "upload",
     doc_id=None,
     sync_frequency: str = "never",
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """
     Ingestion for internal knowledge bases (GoogleDrive, etc.).
 
@@ -954,9 +937,7 @@ def ingest_connector(
         doc_id: Document ID for sync operations (required when operation_mode="sync")
         sync_frequency: How often to sync ("never", "daily", "weekly", "monthly")
     """
-    logging.info(
-        f"Starting remote ingestion from {source_type} for user: {user}, job: {job_name}"
-    )
+    logger.info(f"Starting remote ingestion from {source_type} for user: {user}, job: {job_name}")
     self.update_state(state="PROGRESS", meta={"current": 1})
 
     with tempfile.TemporaryDirectory() as temp_dir:
@@ -975,9 +956,7 @@ def ingest_connector(
                     f"Unsupported connector type: {source_type}. Supported types: {ConnectorCreator.get_supported_connectors()}"
                 )
 
-            remote_loader = ConnectorCreator.create_connector(
-                source_type, session_token
-            )
+            remote_loader = ConnectorCreator.create_connector(source_type, session_token)
 
             # Create a clean config for storage
             api_source_config = {
@@ -987,17 +966,11 @@ def ingest_connector(
             }
 
             # Step 2: Download files to temp directory
-            self.update_state(
-                state="PROGRESS", meta={"current": 20, "status": "Downloading files"}
-            )
-            download_info = remote_loader.download_to_directory(
-                temp_dir, api_source_config
-            )
+            self.update_state(state="PROGRESS", meta={"current": 20, "status": "Downloading files"})
+            download_info = remote_loader.download_to_directory(temp_dir, api_source_config)
 
-            if download_info.get("empty_result", False) or not download_info.get(
-                "files_downloaded", 0
-            ):
-                logging.warning(f"No files were downloaded from {source_type}")
+            if download_info.get("empty_result", False) or not download_info.get("files_downloaded", 0):
+                logger.warning(f"No files were downloaded from {source_type}")
                 # Create empty result directly instead of calling a separate method
                 return {
                     "name": job_name,
@@ -1009,9 +982,7 @@ def ingest_connector(
                 }
 
             # Step 3: Use SimpleDirectoryReader to process downloaded files
-            self.update_state(
-                state="PROGRESS", meta={"current": 40, "status": "Processing files"}
-            )
+            self.update_state(state="PROGRESS", meta={"current": 40, "status": "Processing files"})
             reader = SimpleDirectoryReader(
                 input_dir=temp_dir,
                 recursive=True,
@@ -1039,9 +1010,7 @@ def ingest_connector(
             directory_structure = getattr(reader, "directory_structure", {})
 
             # Step 4: Process documents (chunking, embedding, etc.)
-            self.update_state(
-                state="PROGRESS", meta={"current": 60, "status": "Processing documents"}
-            )
+            self.update_state(state="PROGRESS", meta={"current": 60, "status": "Processing documents"})
 
             chunker = Chunker(
                 chunking_strategy="classic_chunk",
@@ -1057,9 +1026,7 @@ def ingest_connector(
                     source = doc.extra_info.get("source")
                     if source and os.path.isabs(source):
                         # Convert absolute path to relative path
-                        doc.extra_info["source"] = os.path.relpath(
-                            source, start=temp_dir
-                        )
+                        doc.extra_info["source"] = os.path.relpath(source, start=temp_dir)
 
             docs = [Document.to_langchain_format(raw_doc) for raw_doc in raw_docs]
 
@@ -1067,9 +1034,7 @@ def ingest_connector(
                 id = ObjectId()
             elif operation_mode == "sync":
                 if not doc_id or not ObjectId.is_valid(doc_id):
-                    logging.error(
-                        "Invalid doc_id provided for sync operation: %s", doc_id
-                    )
+                    logger.error("Invalid doc_id provided for sync operation: %s", doc_id)
                     raise ValueError("doc_id must be provided for sync operation.")
                 id = ObjectId(doc_id)
             else:
@@ -1078,9 +1043,7 @@ def ingest_connector(
             vector_store_path = os.path.join(temp_dir, "vector_store")
             os.makedirs(vector_store_path, exist_ok=True)
 
-            self.update_state(
-                state="PROGRESS", meta={"current": 80, "status": "Storing documents"}
-            )
+            self.update_state(state="PROGRESS", meta={"current": 80, "status": "Storing documents"})
             embed_and_store_documents(docs, vector_store_path, id, self)
 
             tokens = count_tokens_docs(docs)
@@ -1093,26 +1056,22 @@ def ingest_connector(
                 "retriever": retriever,
                 "id": str(id),
                 "type": "connector:file",
-                "remote_data": json.dumps(
-                    {"provider": source_type, **api_source_config}
-                ),
+                "remote_data": json.dumps({"provider": source_type, **api_source_config}),
                 "directory_structure": json.dumps(directory_structure),
                 "sync_frequency": sync_frequency,
             }
 
             if operation_mode == "sync":
-                file_data["last_sync"] = datetime.datetime.now()
+                file_data["last_sync"] = datetime.datetime.now(datetime.UTC)
             else:
-                file_data["last_sync"] = datetime.datetime.now()
+                file_data["last_sync"] = datetime.datetime.now(datetime.UTC)
 
             upload_index(vector_store_path, file_data)
 
             # Ensure we mark the task as complete
-            self.update_state(
-                state="PROGRESS", meta={"current": 100, "status": "Complete"}
-            )
+            self.update_state(state="PROGRESS", meta={"current": 100, "status": "Complete"})
 
-            logging.info(f"Remote ingestion completed: {job_name}")
+            logger.info(f"Remote ingestion completed: {job_name}")
 
             return {
                 "user": user,
@@ -1124,16 +1083,14 @@ def ingest_connector(
             }
 
         except Exception as e:
-            logging.error(f"Error during remote ingestion: {e}", exc_info=True)
+            logger.error(f"Error during remote ingestion: {e}", exc_info=True)
             raise
 
 
-def mcp_oauth(self, config: Dict[str, Any], user_id: str = None) -> Dict[str, Any]:
+def mcp_oauth(self, config: dict[str, Any], user_id: str = None) -> dict[str, Any]:
     """Worker to handle MCP OAuth flow asynchronously."""
 
-    logging.info(
-        "[MCP OAuth] Worker started for user_id=%s, config=%s", user_id, config
-    )
+    logging.info("[MCP OAuth] Worker started for user_id=%s, config=%s", user_id, config)
     try:
         import asyncio
 
@@ -1143,7 +1100,7 @@ def mcp_oauth(self, config: Dict[str, Any], user_id: str = None) -> Dict[str, An
         logging.info("[MCP OAuth] Task ID: %s", task_id)
         redis_client = get_redis_instance()
 
-        def update_status(status_data: Dict[str, Any]):
+        def update_status(status_data: dict[str, Any]):
             logging.info("[MCP OAuth] Updating status: %s", status_data)
             status_key = f"mcp_oauth_status:{task_id}"
             redis_client.setex(status_key, 600, json.dumps(status_data))
@@ -1178,20 +1135,16 @@ def mcp_oauth(self, config: Dict[str, Any], user_id: str = None) -> Dict[str, An
         asyncio.set_event_loop(loop)
 
         try:
-            logging.info("[MCP OAuth] Starting event loop for OAuth discovery...")
+            logger.info("[MCP OAuth] Starting event loop for OAuth discovery...")
             tools_response = loop.run_until_complete(run_oauth_discovery())
-            logging.info(
-                "[MCP OAuth] Tools response after async call: %s", tools_response
-            )
+            logging.info("[MCP OAuth] Tools response after async call: %s", tools_response)
 
             status_key = f"mcp_oauth_status:{task_id}"
             redis_status = redis_client.get(status_key)
             if redis_status:
-                logging.info(
-                    "[MCP OAuth] Redis status after async call: %s", redis_status
-                )
+                logging.info("[MCP OAuth] Redis status after async call: %s", redis_status)
             else:
-                logging.warning(
+                logging.getLogger(__name__).warning(
                     "[MCP OAuth] No Redis status found after async call for key: %s",
                     status_key,
                 )
@@ -1207,15 +1160,11 @@ def mcp_oauth(self, config: Dict[str, Any], user_id: str = None) -> Dict[str, An
                 }
             )
 
-            logging.info(
-                "[MCP OAuth] OAuth flow completed successfully for task_id=%s", task_id
-            )
+            logging.info("[MCP OAuth] OAuth flow completed successfully for task_id=%s", task_id)
             return {"success": True, "tools": tools, "tools_count": len(tools)}
-        except Exception as e:
-            error_msg = f"OAuth flow failed: {str(e)}"
-            logging.error(
-                "[MCP OAuth] Exception in OAuth discovery: %s", error_msg, exc_info=True
-            )
+        except (RuntimeError, ValueError, OSError) as e:
+            error_msg = f"OAuth flow failed: {e!s}"
+            logging.exception("[MCP OAuth] Exception in OAuth discovery: %s", error_msg)
             update_status(
                 {
                     "status": "error",
@@ -1229,10 +1178,8 @@ def mcp_oauth(self, config: Dict[str, Any], user_id: str = None) -> Dict[str, An
             logging.info("[MCP OAuth] Closing event loop for task_id=%s", task_id)
             loop.close()
     except Exception as e:
-        error_msg = f"Failed to initialize OAuth flow: {str(e)}"
-        logging.error(
-            "[MCP OAuth] Exception during initialization: %s", error_msg, exc_info=True
-        )
+        error_msg = f"Failed to initialize OAuth flow: {e!s}"
+        logging.exception("[MCP OAuth] Exception during initialization: %s", error_msg)
         update_status(
             {
                 "status": "error",
@@ -1244,7 +1191,7 @@ def mcp_oauth(self, config: Dict[str, Any], user_id: str = None) -> Dict[str, An
         return {"success": False, "error": error_msg}
 
 
-def mcp_oauth_status(self, task_id: str) -> Dict[str, Any]:
+def mcp_oauth_status(self, task_id: str) -> dict[str, Any]:
     """Check the status of an MCP OAuth flow."""
     redis_client = get_redis_instance()
     status_key = f"mcp_oauth_status:{task_id}"

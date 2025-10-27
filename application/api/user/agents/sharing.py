@@ -4,12 +4,13 @@ import datetime
 import secrets
 
 from bson import DBRef
+from bson.errors import InvalidId
 from bson.objectid import ObjectId
 from flask import current_app, jsonify, make_response, request
-from flask_restx import fields, Namespace, Resource
+from flask_restx import Namespace, Resource, fields
+from pymongo.errors import PyMongoError
 
 from application.api import api
-from application.core.settings import settings
 from application.api.user.base import (
     agents_collection,
     db,
@@ -18,11 +19,10 @@ from application.api.user.base import (
     user_tools_collection,
     users_collection,
 )
+from application.core.settings import settings
 from application.utils import generate_image_url
 
-agents_sharing_ns = Namespace(
-    "agents", description="Agent management operations", path="/api"
-)
+agents_sharing_ns = Namespace("agents", description="Agent management operations", path="/api")
 
 
 @agents_sharing_ns.route("/shared_agent")
@@ -37,9 +37,7 @@ class SharedAgent(Resource):
         shared_token = request.args.get("token")
 
         if not shared_token:
-            return make_response(
-                jsonify({"success": False, "message": "Token or ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Token or ID is required"}), 400)
         try:
             query = {
                 "shared_publicly": True,
@@ -56,11 +54,7 @@ class SharedAgent(Resource):
                 "id": agent_id,
                 "user": shared_agent.get("user", ""),
                 "name": shared_agent.get("name", ""),
-                "image": (
-                    generate_image_url(shared_agent["image"])
-                    if shared_agent.get("image")
-                    else ""
-                ),
+                "image": (generate_image_url(shared_agent["image"]) if shared_agent.get("image") else ""),
                 "description": shared_agent.get("description", ""),
                 "source": (
                     str(source_doc["_id"])
@@ -106,7 +100,7 @@ class SharedAgent(Resource):
                         {"$addToSet": {"agent_preferences.shared_with_me": agent_id}},
                     )
             return make_response(jsonify(data), 200)
-        except Exception as err:
+        except (InvalidId, PyMongoError, TypeError, ValueError) as err:
             current_app.logger.error(f"Error retrieving shared agent: {err}")
             return make_response(jsonify({"success": False}), 400)
 
@@ -122,14 +116,10 @@ class SharedAgents(Resource):
             user_id = decoded_token.get("sub")
 
             user_doc = ensure_user_doc(user_id)
-            shared_with_ids = user_doc.get("agent_preferences", {}).get(
-                "shared_with_me", []
-            )
+            shared_with_ids = user_doc.get("agent_preferences", {}).get("shared_with_me", [])
             shared_object_ids = [ObjectId(id) for id in shared_with_ids]
 
-            shared_agents_cursor = agents_collection.find(
-                {"_id": {"$in": shared_object_ids}, "shared_publicly": True}
-            )
+            shared_agents_cursor = agents_collection.find({"_id": {"$in": shared_object_ids}, "shared_publicly": True})
             shared_agents = list(shared_agents_cursor)
 
             found_ids_set = {str(agent["_id"]) for agent in shared_agents}
@@ -146,9 +136,7 @@ class SharedAgents(Resource):
                     "id": str(agent["_id"]),
                     "name": agent.get("name", ""),
                     "description": agent.get("description", ""),
-                    "image": (
-                        generate_image_url(agent["image"]) if agent.get("image") else ""
-                    ),
+                    "image": (generate_image_url(agent["image"]) if agent.get("image") else ""),
                     "tools": agent.get("tools", []),
                     "tool_details": resolve_tool_details(agent.get("tools", [])),
                     "agent_type": agent.get("agent_type", ""),
@@ -169,7 +157,7 @@ class SharedAgents(Resource):
             ]
 
             return make_response(jsonify(list_shared_agents), 200)
-        except Exception as err:
+        except (InvalidId, PyMongoError, TypeError, ValueError) as err:
             current_app.logger.error(f"Error retrieving shared agents: {err}")
             return make_response(jsonify({"success": False}), 400)
 
@@ -181,12 +169,8 @@ class ShareAgent(Resource):
             "ShareAgentModel",
             {
                 "id": fields.String(required=True, description="ID of the agent"),
-                "shared": fields.Boolean(
-                    required=True, description="Share or unshare the agent"
-                ),
-                "username": fields.String(
-                    required=False, description="Name of the user"
-                ),
+                "shared": fields.Boolean(required=True, description="Share or unshare the agent"),
+                "username": fields.String(required=False, description="Name of the user"),
             },
         )
     )
@@ -199,17 +183,13 @@ class ShareAgent(Resource):
 
         data = request.get_json()
         if not data:
-            return make_response(
-                jsonify({"success": False, "message": "Missing JSON body"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "Missing JSON body"}), 400)
         agent_id = data.get("id")
         shared = data.get("shared")
         username = data.get("username", "")
 
         if not agent_id:
-            return make_response(
-                jsonify({"success": False, "message": "ID is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "ID is required"}), 400)
         if shared is None:
             return make_response(
                 jsonify(
@@ -223,19 +203,15 @@ class ShareAgent(Resource):
         try:
             try:
                 agent_oid = ObjectId(agent_id)
-            except Exception:
-                return make_response(
-                    jsonify({"success": False, "message": "Invalid agent ID"}), 400
-                )
+            except (InvalidId, TypeError):
+                return make_response(jsonify({"success": False, "message": "Invalid agent ID"}), 400)
             agent = agents_collection.find_one({"_id": agent_oid, "user": user})
             if not agent:
-                return make_response(
-                    jsonify({"success": False, "message": "Agent not found"}), 404
-                )
+                return make_response(jsonify({"success": False, "message": "Agent not found"}), 404)
             if shared:
                 shared_metadata = {
                     "shared_by": username,
-                    "shared_at": datetime.datetime.now(datetime.timezone.utc),
+                    "shared_at": datetime.datetime.now(datetime.UTC),
                 }
                 shared_token = secrets.token_urlsafe(32)
                 agents_collection.update_one(
@@ -254,10 +230,8 @@ class ShareAgent(Resource):
                     {"$set": {"shared_publicly": shared, "shared_token": None}},
                     {"$unset": {"shared_metadata": ""}},
                 )
-        except Exception as err:
+        except PyMongoError as err:
             current_app.logger.error(f"Error sharing/unsharing agent: {err}")
             return make_response(jsonify({"success": False, "error": str(err)}), 400)
         shared_token = shared_token if shared else None
-        return make_response(
-            jsonify({"success": True, "shared_token": shared_token}), 200
-        )
+        return make_response(jsonify({"success": True, "shared_token": shared_token}), 200)

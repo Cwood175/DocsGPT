@@ -8,15 +8,11 @@ from application.storage.storage_creator import StorageCreator
 
 
 class OpenAILLM(BaseLLM):
-
     def __init__(self, api_key=None, user_api_key=None, *args, **kwargs):
         from openai import OpenAI
 
         super().__init__(*args, **kwargs)
-        if (
-            isinstance(settings.OPENAI_BASE_URL, str)
-            and settings.OPENAI_BASE_URL.strip()
-        ):
+        if isinstance(settings.OPENAI_BASE_URL, str) and settings.OPENAI_BASE_URL.strip():
             self.client = OpenAI(api_key=api_key, base_url=settings.OPENAI_BASE_URL)
         else:
             DEFAULT_OPENAI_API_BASE = "https://api.openai.com/v1"
@@ -40,13 +36,9 @@ class OpenAILLM(BaseLLM):
                 elif isinstance(content, list):
                     for item in content:
                         if "text" in item:
-                            cleaned_messages.append(
-                                {"role": role, "content": item["text"]}
-                            )
+                            cleaned_messages.append({"role": role, "content": item["text"]})
                         elif "function_call" in item:
-                            cleaned_args = self._remove_null_values(
-                                item["function_call"]["args"]
-                            )
+                            cleaned_args = self._remove_null_values(item["function_call"]["args"])
                             tool_call = {
                                 "id": item["function_call"]["call_id"],
                                 "type": "function",
@@ -66,45 +58,23 @@ class OpenAILLM(BaseLLM):
                             cleaned_messages.append(
                                 {
                                     "role": "tool",
-                                    "tool_call_id": item["function_response"][
-                                        "call_id"
-                                    ],
-                                    "content": json.dumps(
-                                        item["function_response"]["response"]["result"]
-                                    ),
+                                    "tool_call_id": item["function_response"]["call_id"],
+                                    "content": json.dumps(item["function_response"]["response"]["result"]),
                                 }
                             )
                         elif isinstance(item, dict):
                             content_parts = []
                             if "text" in item:
-                                content_parts.append(
-                                    {"type": "text", "text": item["text"]}
-                                )
+                                content_parts.append({"type": "text", "text": item["text"]})
                             elif (
-                                "type" in item
-                                and item["type"] == "text"
-                                and "text" in item
+                                ("type" in item and item["type"] == "text" and "text" in item)
+                                or ("type" in item and item["type"] == "file" and "file" in item)
+                                or ("type" in item and item["type"] == "image_url" and "image_url" in item)
                             ):
                                 content_parts.append(item)
-                            elif (
-                                "type" in item
-                                and item["type"] == "file"
-                                and "file" in item
-                            ):
-                                content_parts.append(item)
-                            elif (
-                                "type" in item
-                                and item["type"] == "image_url"
-                                and "image_url" in item
-                            ):
-                                content_parts.append(item)
-                            cleaned_messages.append(
-                                {"role": role, "content": content_parts}
-                            )
+                            cleaned_messages.append({"role": role, "content": content_parts})
                         else:
-                            raise ValueError(
-                                f"Unexpected content dictionary format: {item}"
-                            )
+                            raise ValueError(f"Unexpected content dictionary format: {item}")
                 else:
                     raise ValueError(f"Unexpected content type: {type(content)}")
 
@@ -205,9 +175,7 @@ class OpenAILLM(BaseLLM):
                         schema_copy["additionalProperties"] = False
                         # Ensure 'required' includes all properties for OpenAI strict mode
                         if "properties" in schema_copy:
-                            schema_copy["required"] = list(
-                                schema_copy["properties"].keys()
-                            )
+                            schema_copy["required"] = list(schema_copy["properties"].keys())
 
                     for key, value in schema_copy.items():
                         if key == "properties" and isinstance(value, dict):
@@ -217,13 +185,8 @@ class OpenAILLM(BaseLLM):
                             }
                         elif key == "items" and isinstance(value, dict):
                             schema_copy[key] = add_additional_properties_false(value)
-                        elif key in ["anyOf", "oneOf", "allOf"] and isinstance(
-                            value, list
-                        ):
-                            schema_copy[key] = [
-                                add_additional_properties_false(sub_schema)
-                                for sub_schema in value
-                            ]
+                        elif key in ["anyOf", "oneOf", "allOf"] and isinstance(value, list):
+                            schema_copy[key] = [add_additional_properties_false(sub_schema) for sub_schema in value]
 
                     return schema_copy
                 return schema_obj
@@ -234,9 +197,7 @@ class OpenAILLM(BaseLLM):
                 "type": "json_schema",
                 "json_schema": {
                     "name": processed_schema.get("name", "response"),
-                    "description": processed_schema.get(
-                        "description", "Structured response"
-                    ),
+                    "description": processed_schema.get("description", "Structured response"),
                     "schema": processed_schema,
                     "strict": True,
                 },
@@ -244,8 +205,8 @@ class OpenAILLM(BaseLLM):
 
             return result
 
-        except Exception as e:
-            logging.error(f"Error preparing structured output format: {e}")
+        except (AttributeError, TypeError, ValueError) as e:
+            logging.getLogger(__name__).exception(f"Error preparing structured output format: {e}")
             return None
 
     def get_supported_attachment_types(self):
@@ -294,9 +255,7 @@ class OpenAILLM(BaseLLM):
 
         if isinstance(prepared_messages[user_message_index].get("content"), str):
             text_content = prepared_messages[user_message_index]["content"]
-            prepared_messages[user_message_index]["content"] = [
-                {"type": "text", "text": text_content}
-            ]
+            prepared_messages[user_message_index]["content"] = [{"type": "text", "text": text_content}]
         elif not isinstance(prepared_messages[user_message_index].get("content"), list):
             prepared_messages[user_message_index]["content"] = []
 
@@ -309,15 +268,11 @@ class OpenAILLM(BaseLLM):
                     prepared_messages[user_message_index]["content"].append(
                         {
                             "type": "image_url",
-                            "image_url": {
-                                "url": f"data:{mime_type};base64,{base64_image}"
-                            },
+                            "image_url": {"url": f"data:{mime_type};base64,{base64_image}"},
                         }
                     )
-                except Exception as e:
-                    logging.error(
-                        f"Error processing image attachment: {e}", exc_info=True
-                    )
+                except (OSError, TypeError, ValueError) as e:
+                    logging.getLogger(__name__).exception(f"Error processing image attachment: {e}")
                     if "content" in attachment:
                         prepared_messages[user_message_index]["content"].append(
                             {
@@ -332,8 +287,8 @@ class OpenAILLM(BaseLLM):
                     prepared_messages[user_message_index]["content"].append(
                         {"type": "file", "file": {"file_id": file_id}}
                     )
-                except Exception as e:
-                    logging.error(f"Error uploading PDF to OpenAI: {e}", exc_info=True)
+                except (OSError, TypeError, ValueError) as e:
+                    logging.getLogger(__name__).exception(f"Error uploading PDF to OpenAI: {e}")
                     if "content" in attachment:
                         prepared_messages[user_message_index]["content"].append(
                             {
@@ -388,12 +343,12 @@ class OpenAILLM(BaseLLM):
             raise FileNotFoundError(f"File not found: {file_path}")
 
         try:
-            file_id = self.storage.process_file(
-                file_path,
-                lambda local_path, **kwargs: self.client.files.create(
-                    file=open(local_path, "rb"), purpose="assistants"
-                ).id,
-            )
+
+            def upload_file(local_path, **kwargs):
+                with open(local_path, "rb") as file:
+                    return self.client.files.create(file=file, purpose="assistants").id
+
+            file_id = self.storage.process_file(file_path, upload_file)
 
             from application.core.mongo_db import MongoDB
 
@@ -401,18 +356,15 @@ class OpenAILLM(BaseLLM):
             db = mongo[settings.MONGO_DB_NAME]
             attachments_collection = db["attachments"]
             if "_id" in attachment:
-                attachments_collection.update_one(
-                    {"_id": attachment["_id"]}, {"$set": {"openai_file_id": file_id}}
-                )
+                attachments_collection.update_one({"_id": attachment["_id"]}, {"$set": {"openai_file_id": file_id}})
 
             return file_id
-        except Exception as e:
-            logging.error(f"Error uploading file to OpenAI: {e}", exc_info=True)
+        except (OSError, KeyError, TypeError, ValueError) as e:
+            logging.getLogger(__name__).exception(f"Error uploading file to OpenAI: {e}")
             raise
 
 
 class AzureOpenAILLM(OpenAILLM):
-
     def __init__(self, api_key, user_api_key, *args, **kwargs):
 
         super().__init__(api_key)

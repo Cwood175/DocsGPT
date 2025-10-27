@@ -1,6 +1,7 @@
 import json
 
 import requests
+
 from application.agents.tools.base import Tool
 
 
@@ -18,9 +19,7 @@ class APITool(Tool):
         self.query_params = config.get("query_params", {})
 
     def execute_action(self, action_name, **kwargs):
-        return self._make_api_call(
-            self.url, self.method, self.headers, self.query_params, kwargs
-        )
+        return self._make_api_call(self.url, self.method, self.headers, self.query_params, kwargs)
 
     def _make_api_call(self, url, method, headers, query_params, body):
         if query_params:
@@ -33,9 +32,7 @@ class APITool(Tool):
                 body = None
             response = requests.request(method, url, headers=headers, data=body)
             response.raise_for_status()
-            content_type = response.headers.get(
-                "Content-Type", "application/json"
-            ).lower()
+            content_type = response.headers.get("Content-Type", "application/json").lower()
             if "application/json" in content_type:
                 try:
                     data = response.json()
@@ -62,7 +59,7 @@ class APITool(Tool):
         except requests.exceptions.RequestException as e:
             return {
                 "status_code": response.status_code if response else None,
-                "message": f"API call failed: {str(e)}",
+                "message": f"API call failed: {e}",
             }
 
     def get_actions_metadata(self):

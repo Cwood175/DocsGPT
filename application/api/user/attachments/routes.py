@@ -4,7 +4,7 @@ import os
 
 from bson.objectid import ObjectId
 from flask import current_app, jsonify, make_response, request
-from flask_restx import fields, Namespace, Resource
+from flask_restx import Namespace, Resource, fields
 
 from application.api import api
 from application.api.user.base import agents_collection, storage
@@ -13,10 +13,7 @@ from application.core.settings import settings
 from application.tts.tts_creator import TTSCreator
 from application.utils import safe_filename
 
-
-attachments_ns = Namespace(
-    "attachments", description="File attachments and media operations", path="/api"
-)
+attachments_ns = Namespace("attachments", description="File attachments and media operations", path="/api")
 
 
 @attachments_ns.route("/store_attachment")
@@ -26,9 +23,7 @@ class StoreAttachment(Resource):
             "AttachmentModel",
             {
                 "file": fields.Raw(required=True, description="File to upload"),
-                "api_key": fields.String(
-                    required=False, description="API key (optional)"
-                ),
+                "api_key": fields.String(required=False, description="API key (optional)"),
             },
         )
     )
@@ -51,18 +46,14 @@ class StoreAttachment(Resource):
         elif api_key:
             agent = agents_collection.find_one({"key": api_key})
             if not agent:
-                return make_response(
-                    jsonify({"success": False, "message": "Invalid API key"}), 401
-                )
+                return make_response(jsonify({"success": False, "message": "Invalid API key"}), 401)
             user = safe_filename(agent.get("user"))
         else:
-            return make_response(
-                jsonify({"success": False, "message": "Authentication required"}), 401
-            )
+            return make_response(jsonify({"success": False, "message": "Authentication required"}), 401)
         try:
             attachment_id = ObjectId()
             original_filename = safe_filename(os.path.basename(file.filename))
-            relative_path = f"{settings.UPLOAD_FOLDER}/{user}/attachments/{str(attachment_id)}/{original_filename}"
+            relative_path = f"{settings.UPLOAD_FOLDER}/{user}/attachments/{attachment_id}/{original_filename}"
 
             metadata = storage.save_file(file, relative_path)
 
@@ -85,8 +76,8 @@ class StoreAttachment(Resource):
                 ),
                 200,
             )
-        except Exception as err:
-            current_app.logger.error(f"Error storing attachment: {err}", exc_info=True)
+        except (AttributeError, OSError, RuntimeError, TypeError, ValueError) as err:
+            current_app.logger.exception("Error storing attachment")
             return make_response(jsonify({"success": False, "error": str(err)}), 400)
 
 
@@ -106,14 +97,10 @@ class ServeImage(Resource):
 
             return response
         except FileNotFoundError:
-            return make_response(
-                jsonify({"success": False, "message": "Image not found"}), 404
-            )
-        except Exception as e:
+            return make_response(jsonify({"success": False, "message": "Image not found"}), 404)
+        except (OSError, RuntimeError, TypeError, ValueError) as e:
             current_app.logger.error(f"Error serving image: {e}")
-            return make_response(
-                jsonify({"success": False, "message": "Error retrieving image"}), 500
-            )
+            return make_response(jsonify({"success": False, "message": "Error retrieving image"}), 500)
 
 
 @attachments_ns.route("/tts")
@@ -121,9 +108,7 @@ class TextToSpeech(Resource):
     tts_model = api.model(
         "TextToSpeechModel",
         {
-            "text": fields.String(
-                required=True, description="Text to be synthesized as audio"
-            ),
+            "text": fields.String(required=True, description="Text to be synthesized as audio"),
         },
     )
 
@@ -145,6 +130,6 @@ class TextToSpeech(Resource):
                 ),
                 200,
             )
-        except Exception as err:
-            current_app.logger.error(f"Error synthesizing audio: {err}", exc_info=True)
+        except (OSError, RuntimeError, TypeError, ValueError):
+            current_app.logger.exception("Error synthesizing audio")
             return make_response(jsonify({"success": False}), 400)

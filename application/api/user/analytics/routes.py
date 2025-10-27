@@ -2,9 +2,11 @@
 
 import datetime
 
+from bson.errors import InvalidId
 from bson.objectid import ObjectId
 from flask import current_app, jsonify, make_response, request
-from flask_restx import fields, Namespace, Resource
+from flask_restx import Namespace, Resource, fields
+from pymongo.errors import PyMongoError
 
 from application.api import api
 from application.api.user.base import (
@@ -17,9 +19,7 @@ from application.api.user.base import (
     user_logs_collection,
 )
 
-analytics_ns = Namespace(
-    "analytics", description="Analytics and reporting operations", path="/api"
-)
+analytics_ns = Namespace("analytics", description="Analytics and reporting operations", path="/api")
 
 
 @analytics_ns.route("/get_message_analytics")
@@ -56,16 +56,12 @@ class GetMessageAnalytics(Resource):
 
         try:
             api_key = (
-                agents_collection.find_one({"_id": ObjectId(api_key_id), "user": user})[
-                    "key"
-                ]
-                if api_key_id
-                else None
+                agents_collection.find_one({"_id": ObjectId(api_key_id), "user": user})["key"] if api_key_id else None
             )
-        except Exception as err:
-            current_app.logger.error(f"Error getting API key: {err}", exc_info=True)
+        except (InvalidId, KeyError, PyMongoError, TypeError):
+            current_app.logger.exception("Error getting API key")
             return make_response(jsonify({"success": False}), 400)
-        end_date = datetime.datetime.now(datetime.timezone.utc)
+        end_date = datetime.datetime.now(datetime.UTC)
 
         if filter_option == "last_hour":
             start_date = end_date - datetime.timedelta(hours=1)
@@ -75,20 +71,12 @@ class GetMessageAnalytics(Resource):
             group_format = "%Y-%m-%d %H:00"
         else:
             if filter_option in ["last_7_days", "last_15_days", "last_30_days"]:
-                filter_days = (
-                    6
-                    if filter_option == "last_7_days"
-                    else 14 if filter_option == "last_15_days" else 29
-                )
+                filter_days = 6 if filter_option == "last_7_days" else 14 if filter_option == "last_15_days" else 29
             else:
-                return make_response(
-                    jsonify({"success": False, "message": "Invalid option"}), 400
-                )
+                return make_response(jsonify({"success": False, "message": "Invalid option"}), 400)
             start_date = end_date - datetime.timedelta(days=filter_days)
             start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_date = end_date.replace(
-                hour=23, minute=59, second=59, microsecond=999999
-            )
+            end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
             group_format = "%Y-%m-%d"
         try:
             match_stage = {
@@ -101,11 +89,7 @@ class GetMessageAnalytics(Resource):
             pipeline = [
                 match_stage,
                 {"$unwind": "$queries"},
-                {
-                    "$match": {
-                        "queries.timestamp": {"$gte": start_date, "$lte": end_date}
-                    }
-                },
+                {"$match": {"queries.timestamp": {"$gte": start_date, "$lte": end_date}}},
                 {
                     "$group": {
                         "_id": {
@@ -132,14 +116,10 @@ class GetMessageAnalytics(Resource):
 
             for entry in message_data:
                 daily_messages[entry["_id"]] = entry["count"]
-        except Exception as err:
-            current_app.logger.error(
-                f"Error getting message analytics: {err}", exc_info=True
-            )
+        except (KeyError, PyMongoError, TypeError):
+            current_app.logger.exception("Error getting message analytics")
             return make_response(jsonify({"success": False}), 400)
-        return make_response(
-            jsonify({"success": True, "messages": daily_messages}), 200
-        )
+        return make_response(jsonify({"success": True, "messages": daily_messages}), 200)
 
 
 @analytics_ns.route("/get_token_analytics")
@@ -176,16 +156,12 @@ class GetTokenAnalytics(Resource):
 
         try:
             api_key = (
-                agents_collection.find_one({"_id": ObjectId(api_key_id), "user": user})[
-                    "key"
-                ]
-                if api_key_id
-                else None
+                agents_collection.find_one({"_id": ObjectId(api_key_id), "user": user})["key"] if api_key_id else None
             )
         except Exception as err:
             current_app.logger.error(f"Error getting API key: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
-        end_date = datetime.datetime.now(datetime.timezone.utc)
+        end_date = datetime.datetime.now(datetime.UTC)
 
         if filter_option == "last_hour":
             start_date = end_date - datetime.timedelta(hours=1)
@@ -200,9 +176,7 @@ class GetTokenAnalytics(Resource):
                             }
                         }
                     },
-                    "total_tokens": {
-                        "$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}
-                    },
+                    "total_tokens": {"$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}},
                 }
             }
         elif filter_option == "last_24_hour":
@@ -218,27 +192,17 @@ class GetTokenAnalytics(Resource):
                             }
                         }
                     },
-                    "total_tokens": {
-                        "$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}
-                    },
+                    "total_tokens": {"$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}},
                 }
             }
         else:
             if filter_option in ["last_7_days", "last_15_days", "last_30_days"]:
-                filter_days = (
-                    6
-                    if filter_option == "last_7_days"
-                    else (14 if filter_option == "last_15_days" else 29)
-                )
+                filter_days = 6 if filter_option == "last_7_days" else (14 if filter_option == "last_15_days" else 29)
             else:
-                return make_response(
-                    jsonify({"success": False, "message": "Invalid option"}), 400
-                )
+                return make_response(jsonify({"success": False, "message": "Invalid option"}), 400)
             start_date = end_date - datetime.timedelta(days=filter_days)
             start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_date = end_date.replace(
-                hour=23, minute=59, second=59, microsecond=999999
-            )
+            end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
             group_format = "%Y-%m-%d"
             group_stage = {
                 "$group": {
@@ -250,9 +214,7 @@ class GetTokenAnalytics(Resource):
                             }
                         }
                     },
-                    "total_tokens": {
-                        "$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}
-                    },
+                    "total_tokens": {"$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}},
                 }
             }
         try:
@@ -287,14 +249,10 @@ class GetTokenAnalytics(Resource):
                     daily_token_usage[entry["_id"]["hour"]] = entry["total_tokens"]
                 else:
                     daily_token_usage[entry["_id"]["day"]] = entry["total_tokens"]
-        except Exception as err:
-            current_app.logger.error(
-                f"Error getting token analytics: {err}", exc_info=True
-            )
+        except (KeyError, PyMongoError, TypeError):
+            current_app.logger.exception("Error getting token analytics")
             return make_response(jsonify({"success": False}), 400)
-        return make_response(
-            jsonify({"success": True, "token_usage": daily_token_usage}), 200
-        )
+        return make_response(jsonify({"success": True, "token_usage": daily_token_usage}), 200)
 
 
 @analytics_ns.route("/get_feedback_analytics")
@@ -331,16 +289,12 @@ class GetFeedbackAnalytics(Resource):
 
         try:
             api_key = (
-                agents_collection.find_one({"_id": ObjectId(api_key_id), "user": user})[
-                    "key"
-                ]
-                if api_key_id
-                else None
+                agents_collection.find_one({"_id": ObjectId(api_key_id), "user": user})["key"] if api_key_id else None
             )
         except Exception as err:
             current_app.logger.error(f"Error getting API key: {err}", exc_info=True)
             return make_response(jsonify({"success": False}), 400)
-        end_date = datetime.datetime.now(datetime.timezone.utc)
+        end_date = datetime.datetime.now(datetime.UTC)
 
         if filter_option == "last_hour":
             start_date = end_date - datetime.timedelta(hours=1)
@@ -362,20 +316,12 @@ class GetFeedbackAnalytics(Resource):
             }
         else:
             if filter_option in ["last_7_days", "last_15_days", "last_30_days"]:
-                filter_days = (
-                    6
-                    if filter_option == "last_7_days"
-                    else (14 if filter_option == "last_15_days" else 29)
-                )
+                filter_days = 6 if filter_option == "last_7_days" else (14 if filter_option == "last_15_days" else 29)
             else:
-                return make_response(
-                    jsonify({"success": False, "message": "Invalid option"}), 400
-                )
+                return make_response(jsonify({"success": False, "message": "Invalid option"}), 400)
             start_date = end_date - datetime.timedelta(days=filter_days)
             start_date = start_date.replace(hour=0, minute=0, second=0, microsecond=0)
-            end_date = end_date.replace(
-                hour=23, minute=59, second=59, microsecond=999999
-            )
+            end_date = end_date.replace(hour=23, minute=59, second=59, microsecond=999999)
             group_format = "%Y-%m-%d"
             date_field = {
                 "$dateToString": {
@@ -439,23 +385,17 @@ class GetFeedbackAnalytics(Resource):
                 intervals = generate_hourly_range(start_date, end_date)
             else:
                 intervals = generate_date_range(start_date, end_date)
-            daily_feedback = {
-                interval: {"positive": 0, "negative": 0} for interval in intervals
-            }
+            daily_feedback = {interval: {"positive": 0, "negative": 0} for interval in intervals}
 
             for entry in feedback_data:
                 daily_feedback[entry["_id"]] = {
                     "positive": entry["positive"],
                     "negative": entry["negative"],
                 }
-        except Exception as err:
-            current_app.logger.error(
-                f"Error getting feedback analytics: {err}", exc_info=True
-            )
+        except (KeyError, PyMongoError, TypeError):
+            current_app.logger.exception("Error getting feedback analytics")
             return make_response(jsonify({"success": False}), 400)
-        return make_response(
-            jsonify({"success": True, "feedback": daily_feedback}), 200
-        )
+        return make_response(jsonify({"success": True, "feedback": daily_feedback}), 200)
 
 
 @analytics_ns.route("/get_user_logs")
@@ -491,23 +431,14 @@ class GetUserLogs(Resource):
         skip = (page - 1) * page_size
 
         try:
-            api_key = (
-                agents_collection.find_one({"_id": ObjectId(api_key_id)})["key"]
-                if api_key_id
-                else None
-            )
-        except Exception as err:
-            current_app.logger.error(f"Error getting API key: {err}", exc_info=True)
+            api_key = agents_collection.find_one({"_id": ObjectId(api_key_id)})["key"] if api_key_id else None
+        except (InvalidId, KeyError, PyMongoError, TypeError):
+            current_app.logger.exception("Error getting API key")
             return make_response(jsonify({"success": False}), 400)
         query = {"user": user}
         if api_key:
             query = {"api_key": api_key}
-        items_cursor = (
-            user_logs_collection.find(query)
-            .sort("timestamp", -1)
-            .skip(skip)
-            .limit(page_size + 1)
-        )
+        items_cursor = user_logs_collection.find(query).sort("timestamp", -1).skip(skip).limit(page_size + 1)
         items = list(items_cursor)
 
         results = [
