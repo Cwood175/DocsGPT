@@ -12,6 +12,7 @@ class ClassicRAG(BaseRetriever):
     def __init__(
         self,
         source,
+        retriever=None,
         chat_history=None,
         prompt="",
         chunks=2,

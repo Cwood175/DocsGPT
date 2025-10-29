@@ -101,6 +101,7 @@ class StreamResource(Resource, BaseAnswerResource):
                     agent_id=data.get("agent_id"),
                     is_shared_usage=processor.is_shared_usage,
                     shared_token=processor.shared_token,
+                    retriever=data.get("retriever")
                 ),
                 mimetype="text/event-stream",
             )
