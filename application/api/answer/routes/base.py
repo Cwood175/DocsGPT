@@ -145,6 +145,7 @@ class BaseAnswerResource:
         self,
         question: str,
         agent: Any,
+        retriever: Optional[Any] = None,
         conversation_id: Optional[str],
         user_api_key: Optional[str],
         decoded_token: Dict[str, Any],

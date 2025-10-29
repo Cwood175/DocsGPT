@@ -95,7 +95,6 @@ class AnswerResource(Resource, BaseAnswerResource):
                 user_api_key=processor.agent_config.get("user_api_key"),
                 decoded_token=processor.decoded_token,
                 isNoneDoc=data.get("isNoneDoc"),
-                index=None,
                 should_save_conversation=data.get("save_conversation", True),
             )
             stream_result = self.process_response_stream(stream)
