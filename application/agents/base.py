@@ -323,7 +323,7 @@ class BaseAgent(ABC):
             and self.llm._supports_tools
             and self.tools
         ):
-            gen_kwargs["tools"] = self.tools
+            gen_kwargs["tools"] = self._build_tool_parameters(self.tools)
         if (
             self.json_schema
             and hasattr(self.llm, "_supports_structured_output")
@@ -353,7 +353,7 @@ class BaseAgent(ABC):
         attachments: Optional[List[Dict]] = None,
     ):
         resp = self.llm_handler.process_message_flow(
-            self, resp, tools_dict, messages, attachments, True
+            resp, tools_dict, messages, attachments, True
         )
         if log_context:
             data = build_stack_data(self.llm_handler, exclude_attributes=["tool_calls"])
@@ -393,10 +393,16 @@ class BaseAgent(ABC):
                     answer_data["schema"] = self.json_schema
                 yield answer_data
             elif hasattr(event, "message") and getattr(event.message, "content", None):
-                answer_data = {"answer": event.message.content}
-                if is_structured_output:
+                content = event.message.content
+                if isinstance(content, dict):
+                    answer_data = content
                     answer_data["structured"] = True
                     answer_data["schema"] = self.json_schema
+                else:
+                    answer_data = {"answer": content}
+                    if is_structured_output:
+                        answer_data["structured"] = True
+                        answer_data["schema"] = self.json_schema
                 yield answer_data
             elif isinstance(event, dict) and "type" in event:
                 yield event

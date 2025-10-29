@@ -545,7 +545,6 @@ class UpdateAgent(Resource):
             "source",
             "sources",
             "chunks",
-            "retriever",
             "prompt_id",
             "tools",
             "agent_type",

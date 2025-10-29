@@ -112,7 +112,6 @@ class OpenAILLM(BaseLLM):
 
     def _raw_gen(
         self,
-        baseself,
         model,
         messages,
         stream=False,
@@ -145,7 +144,6 @@ class OpenAILLM(BaseLLM):
 
     def _raw_gen_stream(
         self,
-        baseself,
         model,
         messages,
         stream=True,

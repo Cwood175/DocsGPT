@@ -33,5 +33,5 @@ class ClassicAgent(BaseAgent):
         yield {"tool_calls": self._get_truncated_tool_calls()}
 
         log_context.stacks.append(
-            {"component": "agent", "data": {"tool_calls": self.tool_calls.copy()}}
+            {"component": "agent", "data": {"tool_calls": self._get_truncated_tool_calls()}}
         )

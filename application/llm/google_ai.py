@@ -326,7 +326,7 @@ class GoogleLLM(BaseLLM):
         if tools:
             return response
         else:
-            return response.text
+            return response.text  # Ensure no unexpected keyword arguments are included in returned values
 
     def _raw_gen_stream(
         self,
@@ -391,7 +391,7 @@ class GoogleLLM(BaseLLM):
                     yield chunk.text
         finally:
             if hasattr(response, "close"):
-                response.close()
+                response.close()  # Ensure no unexpected keyword arguments are included in yielded values
 
     def _supports_tools(self):
         """Return whether this LLM supports function calling."""

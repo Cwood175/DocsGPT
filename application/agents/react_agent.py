@@ -171,7 +171,7 @@ class ReActAgent(BaseAgent):
         prompt = prompt.replace("{observations}", "\n".join(self.observations))
         return prompt
 
-    def _build_execution_prompt(self, query: str) -> str:
+    def _build_execution_prompt(self, query: str, retriever: Optional[Any] = None) -> str:
         """Build execution phase prompt with plan and observations"""
         observations_str = "\n".join(self.observations)
 
@@ -185,7 +185,7 @@ class ReActAgent(BaseAgent):
             f"Otherwise, continue executing the plan."
         )
 
-    def _build_final_answer_prompt(self, query: str) -> str:
+    def _build_final_answer_prompt(self, query: str, retriever: Optional[Any] = None) -> str:
         """Build final synthesis prompt"""
         observations_str = "\n".join(self.observations)
 
@@ -194,7 +194,7 @@ class ReActAgent(BaseAgent):
             logger.warning("ReActAgent: Observations truncated for final answer")
         return FINAL_PROMPT_TEMPLATE.format(query=query, observations=observations_str)
 
-    def _extract_content(self, response: Any) -> str:
+    def _extract_content(self, response: Any, retriever: Optional[Any] = None) -> str:
         """Extract text content from various LLM response formats"""
         if not response:
             return ""
@@ -234,5 +234,5 @@ class ReActAgent(BaseAgent):
                 f"Response not iterable or unexpected format: {type(response)}"
             )
         except Exception as e:
-            logger.error(f"Error extracting content: {e}")
-        return "".join(collected)
+            logger.error(f"Error extracting content: {e}
+            return ''
