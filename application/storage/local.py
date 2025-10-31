@@ -1,7 +1,9 @@
 """Local file system implementation."""
+
 import os
 import shutil
-from typing import BinaryIO, List, Callable
+from collections.abc import Callable
+from typing import BinaryIO
 
 from application.storage.base import BaseStorage
 
@@ -9,16 +11,14 @@ from application.storage.base import BaseStorage
 class LocalStorage(BaseStorage):
     """Local file system storage implementation."""
 
-    def __init__(self, base_dir: str = None):
+    def __init__(self, base_dir: str | None = None):
         """
         Initialize local storage.
 
         Args:
             base_dir: Base directory for all operations. If None, uses current directory.
         """
-        self.base_dir = base_dir or os.path.dirname(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-        )
+        self.base_dir = base_dir or os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
     def _get_full_path(self, path: str) -> str:
         """Get absolute path by combining base_dir and path."""
@@ -32,15 +32,13 @@ class LocalStorage(BaseStorage):
 
         os.makedirs(os.path.dirname(full_path), exist_ok=True)
 
-        if hasattr(file_data, 'save'):
+        if hasattr(file_data, "save"):
             file_data.save(full_path)
         else:
-            with open(full_path, 'wb') as f:
+            with open(full_path, "wb") as f:
                 shutil.copyfileobj(file_data, f)
 
-        return {
-            'storage_type': 'local'
-        }
+        return {"storage_type": "local"}
 
     def get_file(self, path: str) -> BinaryIO:
         """Get a file from local storage."""
@@ -49,7 +47,7 @@ class LocalStorage(BaseStorage):
         if not os.path.exists(full_path):
             raise FileNotFoundError(f"File not found: {full_path}")
 
-        return open(full_path, 'rb')
+        return open(full_path, "rb")
 
     def delete_file(self, path: str) -> bool:
         """Delete a file from local storage."""
@@ -66,7 +64,7 @@ class LocalStorage(BaseStorage):
         full_path = self._get_full_path(path)
         return os.path.exists(full_path)
 
-    def list_files(self, directory: str) -> List[str]:
+    def list_files(self, directory: str) -> list[str]:
         """List all files in a directory in local storage."""
         full_path = self._get_full_path(directory)
 
@@ -105,10 +103,10 @@ class LocalStorage(BaseStorage):
     def is_directory(self, path: str) -> bool:
         """
         Check if a path is a directory in local storage.
-        
+
         Args:
             path: Path to check
-        
+
         Returns:
             bool: True if the path is a directory, False otherwise
         """

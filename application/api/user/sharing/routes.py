@@ -4,9 +4,11 @@ import uuid
 
 from bson.binary import Binary, UuidRepresentation
 from bson.dbref import DBRef
+from bson.errors import InvalidId
 from bson.objectid import ObjectId
 from flask import current_app, jsonify, make_response, request
-from flask_restx import fields, inputs, Namespace, Resource
+from flask_restx import Namespace, Resource, fields, inputs
+from pymongo.errors import PyMongoError
 
 from application.api import api
 from application.api.user.base import (
@@ -18,9 +20,7 @@ from application.api.user.base import (
 )
 from application.utils import check_required_fields
 
-sharing_ns = Namespace(
-    "sharing", description="Conversation sharing operations", path="/api"
-)
+sharing_ns = Namespace("sharing", description="Conversation sharing operations", path="/api")
 
 
 @sharing_ns.route("/share")
@@ -28,9 +28,7 @@ class ShareConversation(Resource):
     share_conversation_model = api.model(
         "ShareConversationModel",
         {
-            "conversation_id": fields.String(
-                required=True, description="Conversation ID"
-            ),
+            "conversation_id": fields.String(required=True, description="Conversation ID"),
             "user": fields.String(description="User ID (optional)"),
             "prompt_id": fields.String(description="Prompt ID (optional)"),
             "chunks": fields.Integer(description="Chunks count (optional)"),
@@ -51,15 +49,11 @@ class ShareConversation(Resource):
             return missing_fields
         is_promptable = request.args.get("isPromptable", type=inputs.boolean)
         if is_promptable is None:
-            return make_response(
-                jsonify({"success": False, "message": "isPromptable is required"}), 400
-            )
+            return make_response(jsonify({"success": False, "message": "isPromptable is required"}), 400)
         conversation_id = data["conversation_id"]
 
         try:
-            conversation = conversations_collection.find_one(
-                {"_id": ObjectId(conversation_id)}
-            )
+            conversation = conversations_collection.find_one({"_id": ObjectId(conversation_id)})
             if conversation is None:
                 return make_response(
                     jsonify(
@@ -71,9 +65,7 @@ class ShareConversation(Resource):
                     404,
                 )
             current_n_queries = len(conversation["queries"])
-            explicit_binary = Binary.from_uuid(
-                uuid.uuid4(), UuidRepresentation.STANDARD
-            )
+            explicit_binary = Binary.from_uuid(uuid.uuid4(), UuidRepresentation.STANDARD)
 
             if is_promptable:
                 prompt_id = data.get("prompt_id", "default")
@@ -87,9 +79,7 @@ class ShareConversation(Resource):
                 }
 
                 if "source" in data and ObjectId.is_valid(data["source"]):
-                    new_api_key_data["source"] = DBRef(
-                        "sources", ObjectId(data["source"])
-                    )
+                    new_api_key_data["source"] = DBRef("sources", ObjectId(data["source"]))
                 if "retriever" in data:
                     new_api_key_data["retriever"] = data["retriever"]
                 pre_existing_api_document = agents_collection.find_one(new_api_key_data)
@@ -97,9 +87,7 @@ class ShareConversation(Resource):
                     api_uuid = pre_existing_api_document["key"]
                     pre_existing = shared_conversations_collections.find_one(
                         {
-                            "conversation_id": DBRef(
-                                "conversations", ObjectId(conversation_id)
-                            ),
+                            "conversation_id": DBRef("conversations", ObjectId(conversation_id)),
                             "isPromptable": is_promptable,
                             "first_n_queries": current_n_queries,
                             "user": user,
@@ -145,9 +133,7 @@ class ShareConversation(Resource):
                     new_api_key_data["name"] = name
 
                     if "source" in data and ObjectId.is_valid(data["source"]):
-                        new_api_key_data["source"] = DBRef(
-                            "sources", ObjectId(data["source"])
-                        )
+                        new_api_key_data["source"] = DBRef("sources", ObjectId(data["source"]))
                     if "retriever" in data:
                         new_api_key_data["retriever"] = data["retriever"]
                     agents_collection.insert_one(new_api_key_data)
@@ -175,9 +161,7 @@ class ShareConversation(Resource):
                     )
             pre_existing = shared_conversations_collections.find_one(
                 {
-                    "conversation_id": DBRef(
-                        "conversations", ObjectId(conversation_id)
-                    ),
+                    "conversation_id": DBRef("conversations", ObjectId(conversation_id)),
                     "isPromptable": is_promptable,
                     "first_n_queries": current_n_queries,
                     "user": user,
@@ -207,15 +191,11 @@ class ShareConversation(Resource):
                     }
                 )
                 return make_response(
-                    jsonify(
-                        {"success": True, "identifier": str(explicit_binary.as_uuid())}
-                    ),
+                    jsonify({"success": True, "identifier": str(explicit_binary.as_uuid())}),
                     201,
                 )
-        except Exception as err:
-            current_app.logger.error(
-                f"Error sharing conversation: {err}", exc_info=True
-            )
+        except (InvalidId, PyMongoError, TypeError, ValueError) as err:
+            current_app.logger.exception(f"Error sharing conversation: {err}")
             return make_response(jsonify({"success": False}), 400)
 
 
@@ -224,17 +204,11 @@ class GetPubliclySharedConversations(Resource):
     @api.doc(description="Get publicly shared conversations by identifier")
     def get(self, identifier: str):
         try:
-            query_uuid = Binary.from_uuid(
-                uuid.UUID(identifier), UuidRepresentation.STANDARD
-            )
+            query_uuid = Binary.from_uuid(uuid.UUID(identifier), UuidRepresentation.STANDARD)
             shared = shared_conversations_collections.find_one({"uuid": query_uuid})
             conversation_queries = []
 
-            if (
-                shared
-                and "conversation_id" in shared
-                and isinstance(shared["conversation_id"], DBRef)
-            ):
+            if shared and "conversation_id" in shared and isinstance(shared["conversation_id"], DBRef):
                 conversation_ref = shared["conversation_id"]
                 conversation = db.dereference(conversation_ref)
                 if conversation is None:
@@ -247,32 +221,23 @@ class GetPubliclySharedConversations(Resource):
                         ),
                         404,
                     )
-                conversation_queries = conversation["queries"][
-                    : (shared["first_n_queries"])
-                ]
+                conversation_queries = conversation["queries"][: (shared["first_n_queries"])]
 
                 for query in conversation_queries:
-                    if "attachments" in query and query["attachments"]:
+                    if query.get("attachments"):
                         attachment_details = []
                         for attachment_id in query["attachments"]:
                             try:
-                                attachment = attachments_collection.find_one(
-                                    {"_id": ObjectId(attachment_id)}
-                                )
+                                attachment = attachments_collection.find_one({"_id": ObjectId(attachment_id)})
                                 if attachment:
                                     attachment_details.append(
                                         {
                                             "id": str(attachment["_id"]),
-                                            "fileName": attachment.get(
-                                                "filename", "Unknown file"
-                                            ),
+                                            "fileName": attachment.get("filename", "Unknown file"),
                                         }
                                     )
-                            except Exception as e:
-                                current_app.logger.error(
-                                    f"Error retrieving attachment {attachment_id}: {e}",
-                                    exc_info=True,
-                                )
+                            except (InvalidId, PyMongoError, TypeError) as e:
+                                current_app.logger.exception(f"Error retrieving attachment {attachment_id}: {e}")
                         query["attachments"] = attachment_details
             else:
                 return make_response(
@@ -291,11 +256,10 @@ class GetPubliclySharedConversations(Resource):
                 "title": conversation["name"],
                 "timestamp": date,
             }
-            if shared["isPromptable"] and "api_key" in shared:
-                res["api_key"] = shared["api_key"]
+            api_key = shared.get("api_key")
+            if shared["isPromptable"] and api_key is not None:
+                res["api_key"] = api_key
             return make_response(jsonify(res), 200)
-        except Exception as err:
-            current_app.logger.error(
-                f"Error getting shared conversation: {err}", exc_info=True
-            )
+        except (PyMongoError, TypeError, ValueError) as err:
+            current_app.logger.exception(f"Error getting shared conversation: {err}")
             return make_response(jsonify({"success": False}), 400)

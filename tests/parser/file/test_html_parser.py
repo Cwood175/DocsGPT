@@ -1,9 +1,9 @@
-import pytest
-from pathlib import Path
-from unittest.mock import patch, MagicMock
-
 import sys
 import types
+from pathlib import Path
+from unittest.mock import MagicMock, patch
+
+import pytest
 
 from application.parser.file.html_parser import HTMLParser
 
@@ -34,10 +34,13 @@ def test_html_parser_parse_file():
     fake_dl.BSHTMLLoader = bshtml_mock
     fake_lc.document_loaders = fake_dl
 
-    with patch.dict(sys.modules, {
-        "langchain_community": fake_lc,
-        "langchain_community.document_loaders": fake_dl,
-    }):
+    with patch.dict(
+        sys.modules,
+        {
+            "langchain_community": fake_lc,
+            "langchain_community.document_loaders": fake_dl,
+        },
+    ):
         result = parser.parse_file(Path("test.html"))
         assert result == [mock_doc]
         bshtml_mock.assert_called_once_with(Path("test.html"))

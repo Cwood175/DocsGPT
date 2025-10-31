@@ -1,5 +1,7 @@
-from application.parser.connectors.google_drive.loader import GoogleDriveLoader
+from typing import ClassVar
+
 from application.parser.connectors.google_drive.auth import GoogleDriveAuth
+from application.parser.connectors.google_drive.loader import GoogleDriveLoader
 
 
 class ConnectorCreator:
@@ -10,11 +12,11 @@ class ConnectorCreator:
     authentication and connect to external document storage systems.
     """
 
-    connectors = {
+    connectors: ClassVar = {
         "google_drive": GoogleDriveLoader,
     }
 
-    auth_providers = {
+    auth_providers: ClassVar = {
         "google_drive": GoogleDriveAuth,
     }
 

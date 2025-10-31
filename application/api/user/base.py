@@ -6,18 +6,17 @@ import datetime
 import os
 import uuid
 from functools import wraps
-from typing import Optional, Tuple
 
 from bson.objectid import ObjectId
-from flask import current_app, jsonify, make_response, Response
+from flask import Response, current_app, jsonify, make_response
 from pymongo import ReturnDocument
+from pymongo.errors import PyMongoError
 from werkzeug.utils import secure_filename
 
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
 from application.storage.storage_creator import StorageCreator
 from application.vectorstore.vector_creator import VectorCreator
-
 
 storage = StorageCreator.get_storage()
 
@@ -46,11 +45,9 @@ try:
         background=True,
     )
     users_collection.create_index("user_id", unique=True)
-except Exception as e:
+except PyMongoError as e:
     print("Error creating indexes:", e)
-current_dir = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-)
+current_dir = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 def generate_minute_range(start_date, end_date):
@@ -121,9 +118,7 @@ def resolve_tool_details(tool_ids):
     Returns:
         List of tool details with id, name, and display_name
     """
-    tools = user_tools_collection.find(
-        {"_id": {"$in": [ObjectId(tid) for tid in tool_ids]}}
-    )
+    tools = user_tools_collection.find({"_id": {"$in": [ObjectId(tid) for tid in tool_ids]}})
     return [
         {
             "id": str(tool["_id"]),
@@ -154,7 +149,7 @@ def get_vector_store(source_id):
 
 def handle_image_upload(
     request, existing_url: str, user: str, storage, base_path: str = "attachments/"
-) -> Tuple[str, Optional[Response]]:
+) -> tuple[str, Response | None]:
     """
     Handle image file upload from request.
 
@@ -174,11 +169,13 @@ def handle_image_upload(
         file = request.files["image"]
         if file.filename != "":
             filename = secure_filename(file.filename)
-            upload_path = f"{settings.UPLOAD_FOLDER.rstrip('/')}/{user}/{base_path.rstrip('/')}/{uuid.uuid4()}_{filename}"
+            upload_path = (
+                f"{settings.UPLOAD_FOLDER.rstrip('/')}/{user}/{base_path.rstrip('/')}/{uuid.uuid4()}_{filename}"
+            )
             try:
                 storage.save_file(file, upload_path, storage_class="STANDARD")
                 image_url = upload_path
-            except Exception as e:
+            except (OSError, ValueError) as e:
                 current_app.logger.error(f"Error uploading image: {e}")
                 return None, make_response(
                     jsonify({"success": False, "message": "Image upload failed"}),
@@ -202,19 +199,11 @@ def require_agent(func):
     def wrapper(*args, **kwargs):
         webhook_token = kwargs.get("webhook_token")
         if not webhook_token:
-            return make_response(
-                jsonify({"success": False, "message": "Webhook token missing"}), 400
-            )
-        agent = agents_collection.find_one(
-            {"incoming_webhook_token": webhook_token}, {"_id": 1}
-        )
+            return make_response(jsonify({"success": False, "message": "Webhook token missing"}), 400)
+        agent = agents_collection.find_one({"incoming_webhook_token": webhook_token}, {"_id": 1})
         if not agent:
-            current_app.logger.warning(
-                f"Webhook attempt with invalid token: {webhook_token}"
-            )
-            return make_response(
-                jsonify({"success": False, "message": "Agent not found"}), 404
-            )
+            current_app.logger.warning(f"Webhook attempt with invalid token: {webhook_token}")
+            return make_response(jsonify({"success": False, "message": "Agent not found"}), 404)
         kwargs["agent"] = agent
         kwargs["agent_id_str"] = str(agent["_id"])
         return func(*args, **kwargs)

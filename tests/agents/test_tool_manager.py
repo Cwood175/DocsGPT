@@ -1,6 +1,7 @@
 from unittest.mock import Mock, patch
 
 import pytest
+
 from application.agents.tools.base import Tool
 from application.agents.tools.tool_manager import ToolManager
 
@@ -21,7 +22,6 @@ class MockTool(Tool):
 
 @pytest.mark.unit
 class TestToolManager:
-
     @patch("application.agents.tools.tool_manager.pkgutil.iter_modules")
     def test_tool_manager_initialization(self, mock_iter):
         mock_iter.return_value = []
@@ -104,17 +104,17 @@ class TestToolManager:
 
         mock_tool_instance = MockTool({})
 
-        with patch("inspect.getmembers", return_value=[("MockTool", MockTool)]):
-            with patch("inspect.isclass", return_value=True):
-                with patch.object(MockTool, "__init__", return_value=None):
-                    manager = ToolManager({})
-                    manager.tools["mock_tool"] = mock_tool_instance
+        with (
+            patch("inspect.getmembers", return_value=[("MockTool", MockTool)]),
+            patch("inspect.isclass", return_value=True),
+            patch.object(MockTool, "__init__", return_value=None),
+        ):
+            manager = ToolManager({})
+            manager.tools["mock_tool"] = mock_tool_instance
 
-                    result = manager.execute_action(
-                        "mock_tool", "test_action", param="value"
-                    )
+            result = manager.execute_action("mock_tool", "test_action", param="value")
 
-                    assert "Executed test_action" in result
+            assert "Executed test_action" in result
 
     def test_execute_action_tool_not_loaded(self):
         with patch(
@@ -129,33 +129,33 @@ class TestToolManager:
     def test_execute_action_with_user_id_for_mcp_tool(self, mock_import):
         mock_tool = MockTool({})
 
-        with patch("inspect.getmembers", return_value=[("MockTool", MockTool)]):
-            with patch("inspect.isclass", return_value=True):
-                manager = ToolManager({"mcp_tool": {}})
-                manager.tools["mcp_tool"] = mock_tool
+        with (
+            patch("inspect.getmembers", return_value=[("MockTool", MockTool)]),
+            patch("inspect.isclass", return_value=True),
+        ):
+            manager = ToolManager({"mcp_tool": {}})
+            manager.tools["mcp_tool"] = mock_tool
 
-                with patch.object(
-                    manager, "load_tool", return_value=mock_tool
-                ) as mock_load:
-                    manager.execute_action("mcp_tool", "action", user_id="user123")
+            with patch.object(manager, "load_tool", return_value=mock_tool) as mock_load:
+                manager.execute_action("mcp_tool", "action", user_id="user123")
 
-                    mock_load.assert_called_once_with("mcp_tool", {}, "user123")
+                mock_load.assert_called_once_with("mcp_tool", {}, "user123")
 
     @patch("application.agents.tools.tool_manager.importlib.import_module")
     def test_execute_action_with_user_id_for_memory_tool(self, mock_import):
         mock_tool = MockTool({})
 
-        with patch("inspect.getmembers", return_value=[("MockTool", MockTool)]):
-            with patch("inspect.isclass", return_value=True):
-                manager = ToolManager({"memory": {}})
-                manager.tools["memory"] = mock_tool
+        with (
+            patch("inspect.getmembers", return_value=[("MockTool", MockTool)]),
+            patch("inspect.isclass", return_value=True),
+        ):
+            manager = ToolManager({"memory": {}})
+            manager.tools["memory"] = mock_tool
 
-                with patch.object(
-                    manager, "load_tool", return_value=mock_tool
-                ) as mock_load:
-                    manager.execute_action("memory", "view", user_id="user456")
+            with patch.object(manager, "load_tool", return_value=mock_tool) as mock_load:
+                manager.execute_action("memory", "view", user_id="user456")
 
-                    mock_load.assert_called_once_with("memory", {}, "user456")
+                mock_load.assert_called_once_with("memory", {}, "user456")
 
     @patch("application.agents.tools.tool_manager.pkgutil.iter_modules")
     @patch("application.agents.tools.tool_manager.importlib.import_module")
@@ -200,7 +200,6 @@ class TestToolManager:
 
 @pytest.mark.unit
 class TestToolBase:
-
     def test_tool_base_is_abstract(self):
         with pytest.raises(TypeError):
             Tool()

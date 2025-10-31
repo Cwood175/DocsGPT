@@ -1,4 +1,5 @@
 import pytest
+
 from application.agents.tools.notes import NotesTool
 from application.core.settings import settings
 
@@ -47,9 +48,7 @@ def notes_tool(monkeypatch) -> NotesTool:
 
     # Patch MongoDB client globally for the tool
 
-    monkeypatch.setattr(
-        "application.core.mongo_db.MongoDB.get_client", lambda: fake_client
-    )
+    monkeypatch.setattr("application.core.mongo_db.MongoDB.get_client", lambda: fake_client)
 
     # Return tool with a fixed tool_id for consistency in tests
 
@@ -195,9 +194,7 @@ def test_notes_tool_isolation(monkeypatch) -> None:
     fake_db = {"notes": fake_collection}
     fake_client = {settings.MONGO_DB_NAME: fake_db}
 
-    monkeypatch.setattr(
-        "application.core.mongo_db.MongoDB.get_client", lambda: fake_client
-    )
+    monkeypatch.setattr("application.core.mongo_db.MongoDB.get_client", lambda: fake_client)
 
     # Create two notes tools with different tool_ids for the same user
 
@@ -239,9 +236,7 @@ def test_notes_tool_auto_generates_tool_id(monkeypatch) -> None:
     fake_db = {"notes": fake_collection}
     fake_client = {settings.MONGO_DB_NAME: fake_db}
 
-    monkeypatch.setattr(
-        "application.core.mongo_db.MongoDB.get_client", lambda: fake_client
-    )
+    monkeypatch.setattr("application.core.mongo_db.MongoDB.get_client", lambda: fake_client)
 
     # Create two tools without providing tool_id for the same user
 

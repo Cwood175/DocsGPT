@@ -1,9 +1,8 @@
-from application.llm.base import BaseLLM
 from application.core.settings import settings
+from application.llm.base import BaseLLM
 
 
 class PremAILLM(BaseLLM):
-
     def __init__(self, api_key=None, user_api_key=None, *args, **kwargs):
         from premai import Prem
 
@@ -15,22 +14,14 @@ class PremAILLM(BaseLLM):
 
     def _raw_gen(self, baseself, model, messages, stream=False, **kwargs):
         response = self.client.chat.completions.create(
-            model=model,
-            project_id=self.project_id,
-            messages=messages,
-            stream=stream,
-            **kwargs
+            model=model, project_id=self.project_id, messages=messages, stream=stream, **kwargs
         )
 
         return response.choices[0].message["content"]
 
     def _raw_gen_stream(self, baseself, model, messages, stream=True, **kwargs):
         response = self.client.chat.completions.create(
-            model=model,
-            project_id=self.project_id,
-            messages=messages,
-            stream=stream,
-            **kwargs
+            model=model, project_id=self.project_id, messages=messages, stream=stream, **kwargs
         )
 
         for line in response:

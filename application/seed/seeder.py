@@ -1,12 +1,10 @@
 import logging
 import os
-from datetime import datetime, timezone
-from typing import Dict, List, Optional, Union
+from datetime import UTC, datetime
 
 import yaml
 from bson import ObjectId
 from bson.dbref import DBRef
-
 from dotenv import load_dotenv
 from pymongo import MongoClient
 
@@ -33,19 +31,17 @@ class DatabaseSeeder:
         if not force and self._is_already_seeded():
             self.logger.info("Database already seeded. Use force=True to reseed.")
             return
-        config_path = config_path or os.path.join(
-            os.path.dirname(__file__), "config", "premade_agents.yaml"
-        )
+        config_path = config_path or os.path.join(os.path.dirname(__file__), "config", "premade_agents.yaml")
 
         try:
             with open(config_path, "r") as f:
                 config = yaml.safe_load(f)
                 self._seed_from_config(config)
         except Exception as e:
-            self.logger.error(f"Failed to load seeding config: {str(e)}")
+            self.logger.error(f"Failed to load seeding config: {e!s}")
             raise
 
-    def _seed_from_config(self, config: Dict):
+    def _seed_from_config(self, config: dict):
         """Seed all data from configuration"""
         self.logger.info("🌱 Starting seeding...")
 
@@ -62,18 +58,14 @@ class DatabaseSeeder:
 
                 source_result = self._handle_source(agent_config)
                 if source_result is False:
-                    self.logger.error(
-                        f"Skipping agent {agent_config['name']} due to source ingestion failure"
-                    )
+                    self.logger.error(f"Skipping agent {agent_config['name']} due to source ingestion failure")
                     continue
                 source_id = source_result
                 # 2. Handle Tools
 
                 tool_ids = self._handle_tools(agent_config)
                 if len(tool_ids) == 0:
-                    self.logger.warning(
-                        f"No valid tools for agent {agent_config['name']}"
-                    )
+                    self.logger.warning(f"No valid tools for agent {agent_config['name']}")
                 used_tool_ids.update(tool_ids)
 
                 # 3. Handle Prompt
@@ -87,48 +79,36 @@ class DatabaseSeeder:
                     "name": agent_config["name"],
                     "description": agent_config["description"],
                     "image": agent_config.get("image", ""),
-                    "source": (
-                        DBRef("sources", ObjectId(source_id)) if source_id else ""
-                    ),
+                    "source": (DBRef("sources", ObjectId(source_id)) if source_id else ""),
                     "tools": [str(tid) for tid in tool_ids],
                     "agent_type": agent_config["agent_type"],
                     "prompt_id": prompt_id or agent_config.get("prompt_id", "default"),
                     "chunks": agent_config.get("chunks", "0"),
                     "retriever": agent_config.get("retriever", ""),
                     "status": "template",
-                    "createdAt": datetime.now(timezone.utc),
-                    "updatedAt": datetime.now(timezone.utc),
+                    "createdAt": datetime.now(UTC),
+                    "updatedAt": datetime.now(UTC),
                 }
 
-                existing = self.agents_collection.find_one(
-                    {"user": self.system_user_id, "name": agent_config["name"]}
-                )
+                existing = self.agents_collection.find_one({"user": self.system_user_id, "name": agent_config["name"]})
                 if existing:
                     self.logger.info(f"Updating existing agent: {agent_config['name']}")
-                    self.agents_collection.update_one(
-                        {"_id": existing["_id"]}, {"$set": agent_data}
-                    )
+                    self.agents_collection.update_one({"_id": existing["_id"]}, {"$set": agent_data})
                     agent_id = existing["_id"]
                 else:
                     self.logger.info(f"Creating new agent: {agent_config['name']}")
                     result = self.agents_collection.insert_one(agent_data)
                     agent_id = result.inserted_id
-                self.logger.info(
-                    f"Successfully processed agent: {agent_config['name']} (ID: {agent_id})"
-                )
+                self.logger.info(f"Successfully processed agent: {agent_config['name']} (ID: {agent_id})")
             except Exception as e:
-                self.logger.error(
-                    f"Error processing agent {agent_config['name']}: {str(e)}"
-                )
+                self.logger.error(f"Error processing agent {agent_config['name']}: {e!s}")
                 continue
         self.logger.info("✅ Database seeding completed")
 
-    def _handle_source(self, agent_config: Dict) -> Union[ObjectId, None, bool]:
+    def _handle_source(self, agent_config: dict) -> ObjectId | None | bool:
         """Handle source ingestion and return source ID"""
         if not agent_config.get("source"):
-            self.logger.info(
-                "No source provided for agent - will create agent without source"
-            )
+            self.logger.info("No source provided for agent - will create agent without source")
             return None
         source_config = agent_config["source"]
         self.logger.info(f"Ingesting source: {source_config['url']}")
@@ -161,10 +141,10 @@ class DatabaseSeeder:
             self.logger.info(f"Source ingested successfully: {source_id}")
             return source_id
         except Exception as e:
-            self.logger.error(f"Failed to ingest source: {str(e)}")
+            self.logger.error(f"Failed to ingest source: {e!s}")
             return False
 
-    def _handle_tools(self, agent_config: Dict) -> List[ObjectId]:
+    def _handle_tools(self, agent_config: dict) -> list[ObjectId]:
         """Handle tool creation and return list of tool IDs"""
         tool_ids = []
         if not agent_config.get("tools"):
@@ -200,11 +180,11 @@ class DatabaseSeeder:
                 tool_ids.append(result.inserted_id)
                 self.logger.info(f"Created new tool: {result.inserted_id}")
             except Exception as e:
-                self.logger.error(f"Failed to process tool {tool_name}: {str(e)}")
+                self.logger.error(f"Failed to process tool {tool_name}: {e!s}")
                 continue
         return tool_ids
 
-    def _handle_prompt(self, agent_config: Dict) -> Optional[str]:
+    def _handle_prompt(self, agent_config: dict) -> str | None:
         """Handle prompt creation and return prompt ID"""
         if not agent_config.get("prompt"):
             return None
@@ -214,9 +194,7 @@ class DatabaseSeeder:
         prompt_content = prompt_config.get("content", "")
 
         if not prompt_content:
-            self.logger.warning(
-                f"No prompt content provided for agent {agent_config['name']}"
-            )
+            self.logger.warning(f"No prompt content provided for agent {agent_config['name']}")
             return None
 
         self.logger.info(f"Processing prompt: {prompt_name}")
@@ -245,18 +223,14 @@ class DatabaseSeeder:
             return prompt_id
 
         except Exception as e:
-            self.logger.error(f"Failed to process prompt {prompt_name}: {str(e)}")
+            self.logger.error(f"Failed to process prompt {prompt_name}: {e!s}")
             return None
 
-    def _process_config(self, config: Dict) -> Dict:
+    def _process_config(self, config: dict) -> dict:
         """Process config values to replace environment variables"""
         processed = {}
         for key, value in config.items():
-            if (
-                isinstance(value, str)
-                and value.startswith("${")
-                and value.endswith("}")
-            ):
+            if isinstance(value, str) and value.startswith("${") and value.endswith("}"):
                 env_var = value[2:-1]
                 processed[key] = os.getenv(env_var, "")
             else:

@@ -1,11 +1,12 @@
-import pymongo
+import logging
 import os
 import shutil
-import logging
+
+import pymongo
 from tqdm import tqdm
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
 logger = logging.getLogger()
 
 # Configuration
@@ -13,10 +14,12 @@ MONGO_URI = "mongodb://localhost:27017/"
 MONGO_ATLAS_URI = "mongodb+srv://<username>:<password>@<cluster>/<dbname>?retryWrites=true&w=majority"
 DB_NAME = "docsgpt"
 
+
 def backup_collection(collection, backup_collection_name):
     logger.info(f"Backing up collection {collection.name} to {backup_collection_name}")
     collection.aggregate([{"$out": backup_collection_name}])
     logger.info("Backup completed")
+
 
 def migrate_to_v1_vectorstore_mongo():
     client = pymongo.MongoClient(MONGO_URI)
@@ -45,6 +48,7 @@ def migrate_to_v1_vectorstore_mongo():
     client.close()
     logger.info("Migration completed")
 
+
 def migrate_faiss_to_v1_vectorstore():
     client = pymongo.MongoClient(MONGO_URI)
     db = client[DB_NAME]
@@ -63,6 +67,7 @@ def migrate_faiss_to_v1_vectorstore():
     client.close()
     logger.info("FAISS migration completed")
 
+
 def migrate_mongo_atlas_vector_to_v1_vectorstore():
     client = pymongo.MongoClient(MONGO_ATLAS_URI)
     db = client[DB_NAME]
@@ -76,12 +81,12 @@ def migrate_mongo_atlas_vector_to_v1_vectorstore():
     vectors = list(vectors_collection.find())
     for vector in tqdm(vectors, desc="Updating Mongo Atlas vectors"):
         documents_collection.update_many(
-            {"store": vector["user"] + "/" + vector["name"]},
-            {"$set": {"source_id": str(vector["_id"])}}
+            {"store": vector["user"] + "/" + vector["name"]}, {"$set": {"source_id": str(vector["_id"])}}
         )
 
     client.close()
     logger.info("Mongo Atlas migration completed")
+
 
 if __name__ == "__main__":
     migrate_faiss_to_v1_vectorstore()

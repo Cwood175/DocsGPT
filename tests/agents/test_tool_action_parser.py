@@ -1,12 +1,12 @@
 from unittest.mock import Mock
 
 import pytest
+
 from application.agents.tools.tool_action_parser import ToolActionParser
 
 
 @pytest.mark.unit
 class TestToolActionParser:
-
     def test_parser_initialization(self):
         parser = ToolActionParser("OpenAILLM")
         assert parser.llm_type == "OpenAILLM"
@@ -59,7 +59,7 @@ class TestToolActionParser:
         call.name = "action_notanumber"
         call.arguments = "{}"
 
-        tool_id, action_name, call_args = parser.parse_args(call)
+        tool_id, action_name, _ = parser.parse_args(call)
 
         assert tool_id == "notanumber"
         assert action_name == "action"
@@ -108,7 +108,7 @@ class TestToolActionParser:
         call.name = "create_new_user_account_999"
         call.arguments = {"username": "test"}
 
-        tool_id, action_name, call_args = parser.parse_args(call)
+        tool_id, action_name, _ = parser.parse_args(call)
 
         assert tool_id == "999"
         assert action_name == "create_new_user_account"
