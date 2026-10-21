@@ -6,7 +6,6 @@ from bson import ObjectId
 
 @pytest.mark.unit
 class TestConversationServiceGet:
-
     def test_returns_none_when_no_conversation_id(self, mock_mongo_db):
         from application.api.answer.services.conversation_service import (
             ConversationService,
@@ -61,9 +60,7 @@ class TestConversationServiceGet:
         collection = mock_mongo_db[settings.MONGO_DB_NAME]["conversations"]
 
         conv_id = ObjectId()
-        collection.insert_one(
-            {"_id": conv_id, "user": "owner_123", "name": "Private Conv"}
-        )
+        collection.insert_one({"_id": conv_id, "user": "owner_123", "name": "Private Conv"})
 
         result = service.get_conversation(str(conv_id), "hacker_456")
 
@@ -89,7 +86,6 @@ class TestConversationServiceGet:
 
 @pytest.mark.unit
 class TestConversationServiceSave:
-
     def test_raises_error_when_no_user_in_token(self, mock_mongo_db):
         """Test validation: user ID required"""
         from application.api.answer.services.conversation_service import (
@@ -108,16 +104,16 @@ class TestConversationServiceSave:
                 sources=[],
                 tool_calls=[],
                 llm=mock_llm,
-                gpt_model="gpt-4",
                 decoded_token={},  # No 'sub' key
             )
 
     def test_truncates_long_source_text(self, mock_mongo_db):
+        from bson import ObjectId
+
         from application.api.answer.services.conversation_service import (
             ConversationService,
         )
         from application.core.settings import settings
-        from bson import ObjectId
 
         service = ConversationService()
         collection = mock_mongo_db[settings.MONGO_DB_NAME]["conversations"]
@@ -136,7 +132,6 @@ class TestConversationServiceSave:
             sources=sources,
             tool_calls=[],
             llm=mock_llm,
-            gpt_model="gpt-4",
             decoded_token={"sub": "user_123"},
         )
 
@@ -147,11 +142,12 @@ class TestConversationServiceSave:
         assert saved_source_text == "x" * 1000
 
     def test_creates_new_conversation_with_summary(self, mock_mongo_db):
+        from bson import ObjectId
+
         from application.api.answer.services.conversation_service import (
             ConversationService,
         )
         from application.core.settings import settings
-        from bson import ObjectId
 
         service = ConversationService()
         collection = mock_mongo_db[settings.MONGO_DB_NAME]["conversations"]
@@ -167,7 +163,6 @@ class TestConversationServiceSave:
             sources=[],
             tool_calls=[],
             llm=mock_llm,
-            gpt_model="gpt-4",
             decoded_token={"sub": "user_123"},
         )
 
@@ -179,11 +174,12 @@ class TestConversationServiceSave:
         assert saved_conv["queries"][0]["prompt"] == "What is Python?"
 
     def test_appends_to_existing_conversation(self, mock_mongo_db):
+        from bson import ObjectId
+
         from application.api.answer.services.conversation_service import (
             ConversationService,
         )
         from application.core.settings import settings
-        from bson import ObjectId
 
         service = ConversationService()
         collection = mock_mongo_db[settings.MONGO_DB_NAME]["conversations"]
@@ -208,7 +204,6 @@ class TestConversationServiceSave:
             sources=[],
             tool_calls=[],
             llm=mock_llm,
-            gpt_model="gpt-4",
             decoded_token={"sub": "user_123"},
         )
 
@@ -237,6 +232,5 @@ class TestConversationServiceSave:
                 sources=[],
                 tool_calls=[],
                 llm=mock_llm,
-                gpt_model="gpt-4",
                 decoded_token={"sub": "hacker_456"},
             )

@@ -3,7 +3,7 @@ import json
 import logging
 from typing import Any, Dict, Generator, List, Optional
 
-from flask import jsonify, make_response, Response
+from flask import Response, jsonify, make_response
 from flask_restx import Namespace
 
 from application.api.answer.services.conversation_service import ConversationService
@@ -12,7 +12,6 @@ from application.core.model_utils import (
     get_default_model_id,
     get_provider_from_model_id,
 )
-
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
 from application.llm.llm_creator import LLMCreator
@@ -27,17 +26,16 @@ answer_ns = Namespace("answer", description="Answer related operations", path="/
 class BaseAnswerResource:
     """Shared base class for answer endpoints"""
 
-    def __init__(self):
+    def __init__(self, gpt_model=None):
         mongo = MongoDB.get_client()
         db = mongo[settings.MONGO_DB_NAME]
         self.db = db
         self.user_logs_collection = db["user_logs"]
         self.default_model_id = get_default_model_id()
+        self.gpt_model = gpt_model or self.default_model_id
         self.conversation_service = ConversationService()
 
-    def validate_request(
-        self, data: Dict[str, Any], require_conversation_id: bool = False
-    ) -> Optional[Response]:
+    def validate_request(self, data: Dict[str, Any], require_conversation_id: bool = False) -> Optional[Response]:
         """Common request validation"""
         required_fields = ["question"]
         if require_conversation_id:
@@ -63,16 +61,12 @@ class BaseAnswerResource:
         agent = agents_collection.find_one({"key": api_key})
 
         if not agent:
-            return make_response(
-                jsonify({"success": False, "message": "Invalid API key."}), 401
-            )
+            return make_response(jsonify({"success": False, "message": "Invalid API key."}), 401)
         limited_token_mode_raw = agent.get("limited_token_mode", False)
         limited_request_mode_raw = agent.get("limited_request_mode", False)
 
         limited_token_mode = (
-            limited_token_mode_raw
-            if isinstance(limited_token_mode_raw, bool)
-            else limited_token_mode_raw == "True"
+            limited_token_mode_raw if isinstance(limited_token_mode_raw, bool) else limited_token_mode_raw == "True"
         )
         limited_request_mode = (
             limited_request_mode_raw
@@ -80,12 +74,8 @@ class BaseAnswerResource:
             else limited_request_mode_raw == "True"
         )
 
-        token_limit = int(
-            agent.get("token_limit", settings.DEFAULT_AGENT_LIMITS["token_limit"])
-        )
-        request_limit = int(
-            agent.get("request_limit", settings.DEFAULT_AGENT_LIMITS["request_limit"])
-        )
+        token_limit = int(agent.get("token_limit", settings.DEFAULT_AGENT_LIMITS["token_limit"]))
+        request_limit = int(agent.get("request_limit", settings.DEFAULT_AGENT_LIMITS["request_limit"]))
 
         token_usage_collection = self.db["token_usage"]
 
@@ -103,9 +93,7 @@ class BaseAnswerResource:
                 {
                     "$group": {
                         "_id": None,
-                        "total_tokens": {
-                            "$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}
-                        },
+                        "total_tokens": {"$sum": {"$add": ["$prompt_tokens", "$generated_tokens"]}},
                     }
                 },
             ]
@@ -119,14 +107,8 @@ class BaseAnswerResource:
             daily_request_usage = 0
         if not limited_token_mode and not limited_request_mode:
             return None
-        token_exceeded = (
-            limited_token_mode and token_limit > 0 and daily_token_usage >= token_limit
-        )
-        request_exceeded = (
-            limited_request_mode
-            and request_limit > 0
-            and daily_request_usage >= request_limit
-        )
+        token_exceeded = limited_token_mode and token_limit > 0 and daily_token_usage >= token_limit
+        request_exceeded = limited_request_mode and request_limit > 0 and daily_request_usage >= request_limit
 
         if token_exceeded or request_exceeded:
             return make_response(
@@ -201,14 +183,10 @@ class BaseAnswerResource:
                     for source in line["sources"]:
                         truncated_source = source.copy()
                         if "text" in truncated_source:
-                            truncated_source["text"] = (
-                                truncated_source["text"][:100].strip() + "..."
-                            )
+                            truncated_source["text"] = truncated_source["text"][:100].strip() + "..."
                         truncated_sources.append(truncated_source)
                     if truncated_sources:
-                        data = json.dumps(
-                            {"type": "source", "source": truncated_sources}
-                        )
+                        data = json.dumps({"type": "source", "source": truncated_sources})
                         yield f"data: {data}\n\n"
                 elif "tool_calls" in line:
                     tool_calls = line["tool_calls"]
@@ -233,11 +211,7 @@ class BaseAnswerResource:
             if isNoneDoc:
                 for doc in source_log_docs:
                     doc["source"] = "None"
-            provider = (
-                get_provider_from_model_id(model_id)
-                if model_id
-                else settings.LLM_PROVIDER
-            )
+            provider = get_provider_from_model_id(model_id) if model_id else settings.LLM_PROVIDER
             system_api_key = get_api_key_for_provider(provider or settings.LLM_PROVIDER)
 
             llm = LLMCreator.create_llm(
@@ -329,9 +303,7 @@ class BaseAnswerResource:
                         attachment_ids=attachment_ids,
                     )
                 except Exception as e:
-                    logger.error(
-                        f"Error saving partial response: {str(e)}", exc_info=True
-                    )
+                    logger.error(f"Error saving partial response: {str(e)}", exc_info=True)
             raise
         except Exception as e:
             logger.error(f"Error in stream: {str(e)}", exc_info=True)

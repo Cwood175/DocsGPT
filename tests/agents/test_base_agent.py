@@ -1,17 +1,19 @@
 from unittest.mock import Mock
 
 import pytest
+
 from application.agents.classic_agent import ClassicAgent
 from application.core.settings import settings
 
 
 @pytest.mark.unit
 class TestBaseAgentInitialization:
-
-    def test_agent_initialization(
-        self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
-    ):
-        agent = ClassicAgent(**agent_base_params)
+    def test_agent_initialization(self, agent_base_params, mock_llm_creator, mock_llm_handler_creator):
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         assert agent.endpoint == agent_base_params["endpoint"]
         assert agent.llm_name == agent_base_params["llm_name"]
@@ -26,7 +28,11 @@ class TestBaseAgentInitialization:
         self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
     ):
         agent_base_params["chat_history"] = None
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
         assert agent.chat_history == []
 
     def test_agent_initialization_with_chat_history(
@@ -37,7 +43,11 @@ class TestBaseAgentInitialization:
         mock_llm_handler_creator,
     ):
         agent_base_params["chat_history"] = sample_chat_history
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
         assert len(agent.chat_history) == 2
         assert agent.chat_history[0]["prompt"] == "What is Python?"
 
@@ -49,9 +59,7 @@ class TestBaseAgentInitialization:
         assert agent.decoded_token == {}
         assert agent.user is None
 
-    def test_agent_user_extracted_from_token(
-        self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
-    ):
+    def test_agent_user_extracted_from_token(self, agent_base_params, mock_llm_creator, mock_llm_handler_creator):
         agent_base_params["decoded_token"] = {"sub": "user123"}
         agent = ClassicAgent(**agent_base_params)
         assert agent.user == "user123"
@@ -59,11 +67,12 @@ class TestBaseAgentInitialization:
 
 @pytest.mark.unit
 class TestBaseAgentBuildMessages:
-
-    def test_build_messages_basic(
-        self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
-    ):
-        agent = ClassicAgent(**agent_base_params)
+    def test_build_messages_basic(self, agent_base_params, mock_llm_creator, mock_llm_handler_creator):
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
         system_prompt = "System prompt content"
         query = "What is Python?"
 
@@ -83,7 +92,11 @@ class TestBaseAgentBuildMessages:
         mock_llm_handler_creator,
     ):
         agent_base_params["chat_history"] = sample_chat_history
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         system_prompt = "System prompt"
         query = "New question?"
@@ -122,31 +135,40 @@ class TestBaseAgentBuildMessages:
     def test_build_messages_handles_missing_filename(
         self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
     ):
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         messages = agent._build_messages("System prompt", "query")
 
         assert messages[0]["role"] == "system"
         assert messages[0]["content"] == "System prompt"
 
-    def test_build_messages_uses_title_as_fallback(
-        self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
-    ):
-        agent = ClassicAgent(**agent_base_params)
+    def test_build_messages_uses_title_as_fallback(self, agent_base_params, mock_llm_creator, mock_llm_handler_creator):
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         agent._build_messages("System prompt", "query")
 
     def test_build_messages_uses_source_as_fallback(
         self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
     ):
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         agent._build_messages("System prompt", "query")
 
 
 @pytest.mark.unit
 class TestBaseAgentTools:
-
     def test_get_user_tools(
         self,
         agent_base_params,
@@ -155,14 +177,14 @@ class TestBaseAgentTools:
         mock_llm_handler_creator,
     ):
         user_tools = mock_mongo_db[settings.MONGO_DB_NAME]["user_tools"]
-        user_tools.insert_one(
-            {"_id": "1", "user": "test_user", "name": "tool1", "status": True}
-        )
-        user_tools.insert_one(
-            {"_id": "2", "user": "test_user", "name": "tool2", "status": True}
-        )
+        user_tools.insert_one({"_id": "1", "user": "test_user", "name": "tool1", "status": True})
+        user_tools.insert_one({"_id": "2", "user": "test_user", "name": "tool2", "status": True})
 
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
         tools = agent._get_user_tools("test_user")
 
         assert len(tools) == 2
@@ -177,12 +199,8 @@ class TestBaseAgentTools:
         mock_llm_handler_creator,
     ):
         user_tools = mock_mongo_db[settings.MONGO_DB_NAME]["user_tools"]
-        user_tools.insert_one(
-            {"_id": "1", "user": "test_user", "name": "tool1", "status": True}
-        )
-        user_tools.insert_one(
-            {"_id": "2", "user": "test_user", "name": "tool2", "status": False}
-        )
+        user_tools.insert_one({"_id": "1", "user": "test_user", "name": "tool1", "status": True})
+        user_tools.insert_one({"_id": "2", "user": "test_user", "name": "tool2", "status": False})
 
         agent = ClassicAgent(**agent_base_params)
         tools = agent._get_user_tools("test_user")
@@ -212,15 +230,21 @@ class TestBaseAgentTools:
         tools_collection = mock_mongo_db[settings.MONGO_DB_NAME]["user_tools"]
         tools_collection.insert_one({"_id": tool_obj_id, "name": "api_tool"})
 
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
         tools = agent._get_tools("api_key_123")
 
         assert tool_id in tools
 
-    def test_build_tool_parameters(
-        self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
-    ):
-        agent = ClassicAgent(**agent_base_params)
+    def test_build_tool_parameters(self, agent_base_params, mock_llm_creator, mock_llm_handler_creator):
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         action = {
             "parameters": {
@@ -241,10 +265,12 @@ class TestBaseAgentTools:
         assert "param1" in params["required"]
         assert "filled_by_llm" not in params["properties"]["param1"]
 
-    def test_prepare_tools_with_api_tool(
-        self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
-    ):
-        agent = ClassicAgent(**agent_base_params)
+    def test_prepare_tools_with_api_tool(self, agent_base_params, mock_llm_creator, mock_llm_handler_creator):
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         tools_dict = {
             "1": {
@@ -270,10 +296,12 @@ class TestBaseAgentTools:
         assert agent.tools[0]["type"] == "function"
         assert agent.tools[0]["function"]["name"] == "get_data_1"
 
-    def test_prepare_tools_with_regular_tool(
-        self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
-    ):
-        agent = ClassicAgent(**agent_base_params)
+    def test_prepare_tools_with_regular_tool(self, agent_base_params, mock_llm_creator, mock_llm_handler_creator):
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         tools_dict = {
             "1": {
@@ -297,7 +325,11 @@ class TestBaseAgentTools:
     def test_prepare_tools_filters_inactive_actions(
         self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
     ):
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         tools_dict = {
             "1": {
@@ -327,7 +359,6 @@ class TestBaseAgentTools:
 
 @pytest.mark.unit
 class TestBaseAgentToolExecution:
-
     def test_execute_tool_action_success(
         self,
         agent_base_params,
@@ -335,7 +366,11 @@ class TestBaseAgentToolExecution:
         mock_llm_handler_creator,
         mock_tool_manager,
     ):
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         call = Mock()
         call.id = "call_123"
@@ -363,10 +398,12 @@ class TestBaseAgentToolExecution:
         assert results[0]["data"]["status"] == "pending"
         assert results[-1]["data"]["status"] == "completed"
 
-    def test_execute_tool_action_invalid_tool_name(
-        self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
-    ):
-        agent = ClassicAgent(**agent_base_params)
+    def test_execute_tool_action_invalid_tool_name(self, agent_base_params, mock_llm_creator, mock_llm_handler_creator):
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         call = Mock()
         call.id = "call_123"
@@ -379,15 +416,14 @@ class TestBaseAgentToolExecution:
 
         assert results[0]["type"] == "tool_call"
         assert results[0]["data"]["status"] == "error"
-        assert (
-            "Failed to parse" in results[0]["data"]["result"]
-            or "not found" in results[0]["data"]["result"]
-        )
+        assert "Failed to parse" in results[0]["data"]["result"] or "not found" in results[0]["data"]["result"]
 
-    def test_execute_tool_action_tool_not_found(
-        self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
-    ):
-        agent = ClassicAgent(**agent_base_params)
+    def test_execute_tool_action_tool_not_found(self, agent_base_params, mock_llm_creator, mock_llm_handler_creator):
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         call = Mock()
         call.id = "call_123"
@@ -409,7 +445,11 @@ class TestBaseAgentToolExecution:
         mock_llm_handler_creator,
         mock_tool_manager,
     ):
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         call = Mock()
         call.id = "call_123"
@@ -440,10 +480,12 @@ class TestBaseAgentToolExecution:
         assert results[-1]["data"]["status"] == "completed"
         assert results[-1]["data"]["arguments"]["param1"] == "value1"
 
-    def test_get_truncated_tool_calls(
-        self, agent_base_params, mock_llm_creator, mock_llm_handler_creator
-    ):
-        agent = ClassicAgent(**agent_base_params)
+    def test_get_truncated_tool_calls(self, agent_base_params, mock_llm_creator, mock_llm_handler_creator):
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         agent.tool_calls = [
             {
@@ -464,7 +506,6 @@ class TestBaseAgentToolExecution:
 
 @pytest.mark.unit
 class TestBaseAgentLLMGeneration:
-
     def test_llm_gen_basic(
         self,
         agent_base_params,
@@ -473,7 +514,11 @@ class TestBaseAgentLLMGeneration:
         mock_llm_handler_creator,
         log_context,
     ):
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         messages = [{"role": "user", "content": "test"}]
         agent._llm_gen(messages, log_context)
@@ -491,7 +536,11 @@ class TestBaseAgentLLMGeneration:
         mock_llm_handler_creator,
         log_context,
     ):
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
         agent.tools = [{"type": "function", "function": {"name": "test"}}]
 
         messages = [{"role": "user", "content": "test"}]
@@ -510,13 +559,15 @@ class TestBaseAgentLLMGeneration:
         log_context,
     ):
         mock_llm._supports_structured_output = Mock(return_value=True)
-        mock_llm.prepare_structured_output_format = Mock(
-            return_value={"schema": "test"}
-        )
+        mock_llm.prepare_structured_output_format = Mock(return_value={"schema": "test"})
 
         agent_base_params["json_schema"] = {"type": "object"}
         agent_base_params["llm_name"] = "openai"
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         messages = [{"role": "user", "content": "test"}]
         agent._llm_gen(messages, log_context)
@@ -527,11 +578,12 @@ class TestBaseAgentLLMGeneration:
 
 @pytest.mark.unit
 class TestBaseAgentHandleResponse:
-
-    def test_handle_response_string(
-        self, agent_base_params, mock_llm_creator, mock_llm_handler_creator, log_context
-    ):
-        agent = ClassicAgent(**agent_base_params)
+    def test_handle_response_string(self, agent_base_params, mock_llm_creator, mock_llm_handler_creator, log_context):
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         response = "Simple string response"
         results = list(agent._handle_response(response, {}, [], log_context))
@@ -542,7 +594,11 @@ class TestBaseAgentHandleResponse:
     def test_handle_response_with_message(
         self, agent_base_params, mock_llm_creator, mock_llm_handler_creator, log_context
     ):
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         response = Mock()
         response.message = Mock()
@@ -564,7 +620,11 @@ class TestBaseAgentHandleResponse:
         mock_llm._supports_structured_output = Mock(return_value=True)
         agent_base_params["json_schema"] = {"type": "object"}
 
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         response = "Structured response"
         results = list(agent._handle_response(response, {}, [], log_context))
@@ -586,7 +646,11 @@ class TestBaseAgentHandleResponse:
 
         mock_llm_handler.process_message_flow = Mock(side_effect=mock_process)
 
-        agent = ClassicAgent(**agent_base_params)
+        params = dict(agent_base_params)
+        gpt_model = params.pop("gpt_model", None)
+        agent = ClassicAgent(**params)
+        if gpt_model is not None and not hasattr(agent, "gpt_model"):
+            agent.gpt_model = gpt_model
 
         response = Mock()
         response.message = None

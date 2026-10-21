@@ -2,11 +2,10 @@ import logging
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
-from application.core.mongo_db import MongoDB
-
-from application.core.settings import settings
 from bson import ObjectId
 
+from application.core.mongo_db import MongoDB
+from application.core.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -18,9 +17,7 @@ class ConversationService:
         self.conversations_collection = db["conversations"]
         self.agents_collection = db["agents"]
 
-    def get_conversation(
-        self, conversation_id: str, user_id: str
-    ) -> Optional[Dict[str, Any]]:
+    def get_conversation(self, conversation_id: str, user_id: str) -> Optional[Dict[str, Any]]:
         """Retrieve a conversation with proper access control"""
         if not conversation_id or not user_id:
             return None
@@ -33,9 +30,7 @@ class ConversationService:
             )
 
             if not conversation:
-                logger.warning(
-                    f"Conversation not found or unauthorized - ID: {conversation_id}, User: {user_id}"
-                )
+                logger.warning(f"Conversation not found or unauthorized - ID: {conversation_id}, User: {user_id}")
                 return None
             conversation["_id"] = str(conversation["_id"])
             return conversation
@@ -54,6 +49,7 @@ class ConversationService:
         llm: Any,
         model_id: str,
         decoded_token: Dict[str, Any],
+        gpt_model: Optional[str] = None,
         index: Optional[int] = None,
         api_key: Optional[str] = None,
         agent_id: Optional[str] = None,
@@ -91,6 +87,7 @@ class ConversationService:
                         f"queries.{index}.timestamp": current_time,
                         f"queries.{index}.attachments": attachment_ids,
                         f"queries.{index}.model_id": model_id,
+                        f"queries.{index}.gpt_model": gpt_model,
                     }
                 },
             )
@@ -122,6 +119,7 @@ class ConversationService:
                             "timestamp": current_time,
                             "attachments": attachment_ids,
                             "model_id": model_id,
+                            "gpt_model": gpt_model,
                         }
                     }
                 },
@@ -147,9 +145,7 @@ class ConversationService:
                 },
             ]
 
-            completion = llm.gen(
-                model=model_id, messages=messages_summary, max_tokens=30
-            )
+            completion = llm.gen(model=model_id, messages=messages_summary, max_tokens=30)
 
             conversation_data = {
                 "user": user_id,
@@ -165,9 +161,13 @@ class ConversationService:
                         "timestamp": current_time,
                         "attachments": attachment_ids,
                         "model_id": model_id,
+                        "gpt_model": gpt_model,
                     }
                 ],
             }
+
+            # store top-level gpt_model for conversation as well
+            conversation_data["gpt_model"] = gpt_model
 
             if api_key:
                 if agent_id:
