@@ -1,10 +1,11 @@
+import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-import uuid
 
-from .base import Tool
 from application.core.mongo_db import MongoDB
 from application.core.settings import settings
+
+from .base import Tool
 
 
 class TodoListTool(Tool):
@@ -26,7 +27,8 @@ class TodoListTool(Tool):
 
         # Get tool_id from configuration (passed from user_tools._id in production)
         # In production, tool_id is the MongoDB ObjectId string from user_tools collection
-        if tool_config and "tool_id" in tool_config:
+        if isinstance(tool_config, dict) and "tool_id" in tool_config:
+            # Only index into tool_config if it's a mapping to avoid TypeError when a string is passed
             self.tool_id = tool_config["tool_id"]
         elif user_id:
             # Fallback for backward compatibility or testing
@@ -35,8 +37,33 @@ class TodoListTool(Tool):
             # Last resort fallback (shouldn't happen in normal use)
             self.tool_id = str(uuid.uuid4())
 
-        db = MongoDB.get_client()[settings.MONGO_DB_NAME]
-        self.collection = db["todos"]
+        # Safely get DB and collection, guarding against unexpected return types from MongoDB.get_client()
+        client = MongoDB.get_client()
+        db = None
+        try:
+            # Preferred: client supports __getitem__ for database access
+            db = client[settings.MONGO_DB_NAME]
+        except Exception:
+            # Try dictionary-like access or attribute access as a fallback
+            try:
+                if isinstance(client, dict):
+                    db = client.get(settings.MONGO_DB_NAME)
+                else:
+                    db = getattr(client, settings.MONGO_DB_NAME, None)
+            except Exception:
+                db = None
+
+        self.collection = None
+        if db is not None:
+            try:
+                self.collection = db["todos"]
+            except Exception:
+                try:
+                    # Some DB wrappers expose get_collection
+                    self.collection = db.get_collection("todos")
+                except Exception:
+                    # If we cannot obtain the collection, leave as None
+                    self.collection = None
 
     # -----------------------------
     # Action implementations
@@ -64,10 +91,7 @@ class TodoListTool(Tool):
             return self._get(kwargs.get("todo_id"))
 
         if action_name == "update":
-            return self._update(
-                kwargs.get("todo_id"),
-                kwargs.get("title", "")
-            )
+            return self._update(kwargs.get("todo_id"), kwargs.get("title", ""))
 
         if action_name == "complete":
             return self._complete(kwargs.get("todo_id"))
@@ -90,12 +114,7 @@ class TodoListTool(Tool):
                 "description": "Create a new todo item.",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "title": {
-                            "type": "string",
-                            "description": "Title of the todo item."
-                        }
-                    },
+                    "properties": {"title": {"type": "string", "description": "Title of the todo item."}},
                     "required": ["title"],
                 },
             },
@@ -104,12 +123,7 @@ class TodoListTool(Tool):
                 "description": "Get a specific todo by ID.",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "todo_id": {
-                            "type": "integer",
-                            "description": "The ID of the todo to retrieve."
-                        }
-                    },
+                    "properties": {"todo_id": {"type": "integer", "description": "The ID of the todo to retrieve."}},
                     "required": ["todo_id"],
                 },
             },
@@ -119,14 +133,8 @@ class TodoListTool(Tool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "todo_id": {
-                            "type": "integer",
-                            "description": "The ID of the todo to update."
-                        },
-                        "title": {
-                            "type": "string",
-                            "description": "The new title for the todo."
-                        }
+                        "todo_id": {"type": "integer", "description": "The ID of the todo to update."},
+                        "title": {"type": "string", "description": "The new title for the todo."},
                     },
                     "required": ["todo_id", "title"],
                 },
@@ -137,10 +145,7 @@ class TodoListTool(Tool):
                 "parameters": {
                     "type": "object",
                     "properties": {
-                        "todo_id": {
-                            "type": "integer",
-                            "description": "The ID of the todo to mark as completed."
-                        }
+                        "todo_id": {"type": "integer", "description": "The ID of the todo to mark as completed."}
                     },
                     "required": ["todo_id"],
                 },
@@ -150,12 +155,7 @@ class TodoListTool(Tool):
                 "description": "Delete a specific todo by ID.",
                 "parameters": {
                     "type": "object",
-                    "properties": {
-                        "todo_id": {
-                            "type": "integer",
-                            "description": "The ID of the todo to delete."
-                        }
-                    },
+                    "properties": {"todo_id": {"type": "integer", "description": "The ID of the todo to delete."}},
                     "required": ["todo_id"],
                 },
             },
@@ -191,10 +191,7 @@ class TodoListTool(Tool):
         With 5-10 todos max, scanning is negligible.
         """
         # Find all todos for this user/tool and get their IDs
-        todos = list(self.collection.find(
-            {"user_id": self.user_id, "tool_id": self.tool_id},
-            {"todo_id": 1}
-        ))
+        todos = list(self.collection.find({"user_id": self.user_id, "tool_id": self.tool_id}, {"todo_id": 1}))
 
         # Find the maximum todo_id
         max_id = 0
@@ -251,11 +248,7 @@ class TodoListTool(Tool):
         if parsed_todo_id is None:
             return "Error: todo_id must be a positive integer."
 
-        doc = self.collection.find_one({
-            "user_id": self.user_id,
-            "tool_id": self.tool_id,
-            "todo_id": parsed_todo_id
-        })
+        doc = self.collection.find_one({"user_id": self.user_id, "tool_id": self.tool_id, "todo_id": parsed_todo_id})
 
         if not doc:
             return f"Error: Todo with ID {parsed_todo_id} not found."
@@ -279,7 +272,7 @@ class TodoListTool(Tool):
 
         result = self.collection.update_one(
             {"user_id": self.user_id, "tool_id": self.tool_id, "todo_id": parsed_todo_id},
-            {"$set": {"title": title, "updated_at": datetime.now()}}
+            {"$set": {"title": title, "updated_at": datetime.now()}},
         )
 
         if result.matched_count == 0:
@@ -295,7 +288,7 @@ class TodoListTool(Tool):
 
         result = self.collection.update_one(
             {"user_id": self.user_id, "tool_id": self.tool_id, "todo_id": parsed_todo_id},
-            {"$set": {"status": "completed", "updated_at": datetime.now()}}
+            {"$set": {"status": "completed", "updated_at": datetime.now()}},
         )
 
         if result.matched_count == 0:
@@ -309,11 +302,9 @@ class TodoListTool(Tool):
         if parsed_todo_id is None:
             return "Error: todo_id must be a positive integer."
 
-        result = self.collection.delete_one({
-            "user_id": self.user_id,
-            "tool_id": self.tool_id,
-            "todo_id": parsed_todo_id
-        })
+        result = self.collection.delete_one(
+            {"user_id": self.user_id, "tool_id": self.tool_id, "todo_id": parsed_todo_id}
+        )
 
         if result.deleted_count == 0:
             return f"Error: Todo with ID {parsed_todo_id} not found."
