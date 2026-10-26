@@ -4,7 +4,6 @@ from bson import ObjectId
 
 @pytest.mark.unit
 class TestGetPromptFunction:
-
     def test_loads_custom_prompt_from_database(self, mock_mongo_db):
         from application.api.answer.services.stream_processor import get_prompt
         from application.core.settings import settings
@@ -44,7 +43,6 @@ class TestGetPromptFunction:
 
 @pytest.mark.unit
 class TestStreamProcessorInitialization:
-
     def test_initializes_with_decoded_token(self, mock_mongo_db):
         from application.api.answer.services.stream_processor import StreamProcessor
 
@@ -99,14 +97,11 @@ class TestStreamProcessorInitialization:
 
 @pytest.mark.unit
 class TestStreamProcessorHistoryLoading:
-
     def test_loads_history_from_existing_conversation(self, mock_mongo_db):
         from application.api.answer.services.stream_processor import StreamProcessor
         from application.core.settings import settings
 
-        conversations_collection = mock_mongo_db[settings.MONGO_DB_NAME][
-            "conversations"
-        ]
+        conversations_collection = mock_mongo_db[settings.MONGO_DB_NAME]["conversations"]
         conv_id = ObjectId()
 
         conversations_collection.insert_one(
@@ -137,9 +132,7 @@ class TestStreamProcessorHistoryLoading:
         from application.api.answer.services.stream_processor import StreamProcessor
         from application.core.settings import settings
 
-        conversations_collection = mock_mongo_db[settings.MONGO_DB_NAME][
-            "conversations"
-        ]
+        conversations_collection = mock_mongo_db[settings.MONGO_DB_NAME]["conversations"]
         conv_id = ObjectId()
 
         conversations_collection.insert_one(
@@ -173,7 +166,6 @@ class TestStreamProcessorHistoryLoading:
 
 @pytest.mark.unit
 class TestStreamProcessorAgentConfiguration:
-
     def test_configures_agent_from_valid_api_key(self, mock_mongo_db):
         from application.api.answer.services.stream_processor import StreamProcessor
         from application.core.settings import settings
@@ -196,11 +188,8 @@ class TestStreamProcessorAgentConfiguration:
 
         processor = StreamProcessor(request_data, None)
 
-        try:
-            processor._configure_agent()
-            assert processor.agent_config is not None
-        except Exception as e:
-            assert "Invalid API Key" in str(e)
+        processor._configure_agent()
+        assert processor.agent_config is not None
 
     def test_uses_default_config_without_api_key(self, mock_mongo_db):
         from application.api.answer.services.stream_processor import StreamProcessor
@@ -215,7 +204,6 @@ class TestStreamProcessorAgentConfiguration:
 
 @pytest.mark.unit
 class TestStreamProcessorAttachments:
-
     def test_processes_attachments_from_request(self, mock_mongo_db):
         from application.api.answer.services.stream_processor import StreamProcessor
         from application.core.settings import settings
@@ -246,7 +234,4 @@ class TestStreamProcessorAttachments:
         processor = StreamProcessor(request_data, {"sub": "user_123"})
 
         assert processor.attachments == []
-        assert (
-            "attachments" not in processor.data
-            or processor.data.get("attachments") is None
-        )
+        assert "attachments" not in processor.data or processor.data.get("attachments") is None

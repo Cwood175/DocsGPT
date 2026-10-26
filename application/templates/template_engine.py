@@ -1,11 +1,11 @@
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from jinja2 import (
-    Environment,
-    select_autoescape,
     ChainableUndefined,
+    Environment,
     TemplateSyntaxError,
+    select_autoescape,
 )
 from jinja2.exceptions import UndefinedError
 
@@ -14,8 +14,6 @@ logger = logging.getLogger(__name__)
 
 class TemplateRenderError(Exception):
     """Raised when template rendering fails"""
-
-    pass
 
 
 class TemplateEngine:
@@ -29,7 +27,7 @@ class TemplateEngine:
             autoescape=select_autoescape(default_for_string=True, default=True),
         )
 
-    def render(self, template_content: str, context: Dict[str, Any]) -> str:
+    def render(self, template_content: str, context: dict[str, Any]) -> str:
         """
         Render template with provided context.
 
@@ -57,7 +55,7 @@ class TemplateEngine:
             logger.error(error_msg)
             raise TemplateRenderError(error_msg) from e
         except Exception as e:
-            error_msg = f"Template rendering failed: {str(e)}"
+            error_msg = f"Template rendering failed: {e!s}"
             logger.error(error_msg)
             raise TemplateRenderError(error_msg) from e
 
@@ -94,5 +92,5 @@ class TemplateEngine:
         try:
             ast = self._env.parse(template_content)
             return set(self._env.get_template_module(ast).make_module().keys())
-        except Exception:
+        except Exception:  # noqa: BLE001
             return set()
