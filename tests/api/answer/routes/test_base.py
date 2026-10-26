@@ -7,9 +7,7 @@ from bson import ObjectId
 
 @pytest.mark.unit
 class TestBaseAnswerValidation:
-    def test_validate_request_passes_with_required_fields(
-        self, mock_mongo_db, flask_app
-    ):
+    def test_validate_request_passes_with_required_fields(self, mock_mongo_db, flask_app):
         from application.api.answer.routes.base import BaseAnswerResource
 
         with flask_app.app_context():
@@ -165,9 +163,7 @@ class TestUsageChecking:
 
         with flask_app.app_context():
             agents_collection = mock_mongo_db[settings.MONGO_DB_NAME]["agents"]
-            token_usage_collection = mock_mongo_db[settings.MONGO_DB_NAME][
-                "token_usage"
-            ]
+            token_usage_collection = mock_mongo_db[settings.MONGO_DB_NAME]["token_usage"]
             agent_id = ObjectId()
 
             agents_collection.insert_one(
@@ -206,9 +202,7 @@ class TestUsageChecking:
 
         with flask_app.app_context():
             agents_collection = mock_mongo_db[settings.MONGO_DB_NAME]["agents"]
-            token_usage_collection = mock_mongo_db[settings.MONGO_DB_NAME][
-                "token_usage"
-            ]
+            token_usage_collection = mock_mongo_db[settings.MONGO_DB_NAME]["token_usage"]
             agent_id = ObjectId()
 
             agents_collection.insert_one(
@@ -356,7 +350,6 @@ class TestCompleteStreamMethod:
                 resource.complete_stream(
                     question="Test?",
                     agent=mock_agent,
-                    retriever=mock_retriever,
                     conversation_id=None,
                     user_api_key=None,
                     decoded_token=decoded_token,
@@ -386,7 +379,6 @@ class TestCompleteStreamMethod:
                 resource.complete_stream(
                     question="Test?",
                     agent=mock_agent,
-                    retriever=mock_retriever,
                     conversation_id=None,
                     user_api_key=None,
                     decoded_token=decoded_token,
@@ -414,16 +406,13 @@ class TestCompleteStreamMethod:
 
             decoded_token = {"sub": "user123"}
 
-            with patch.object(
-                resource.conversation_service, "save_conversation"
-            ) as mock_save:
+            with patch.object(resource.conversation_service, "save_conversation") as mock_save:
                 mock_save.return_value = str(ObjectId())
 
                 list(
                     resource.complete_stream(
                         question="Test?",
                         agent=mock_agent,
-                        retriever=mock_retriever,
                         conversation_id=None,
                         user_api_key=None,
                         decoded_token=decoded_token,
@@ -457,7 +446,6 @@ class TestCompleteStreamMethod:
                 resource.complete_stream(
                     question="Test question?",
                     agent=mock_agent,
-                    retriever=mock_retriever,
                     conversation_id=None,
                     user_api_key="test_key",
                     decoded_token=decoded_token,
@@ -485,11 +473,11 @@ class TestProcessResponseStream:
 
             conv_id = str(ObjectId())
             stream = [
-                f'data: {json.dumps({"type": "answer", "answer": "Hello "})}\n\n',
-                f'data: {json.dumps({"type": "answer", "answer": "world"})}\n\n',
-                f'data: {json.dumps({"type": "source", "source": [{"title": "doc1"}]})}\n\n',
-                f'data: {json.dumps({"type": "id", "id": conv_id})}\n\n',
-                f'data: {json.dumps({"type": "end"})}\n\n',
+                f"data: {json.dumps({'type': 'answer', 'answer': 'Hello '})}\n\n",
+                f"data: {json.dumps({'type': 'answer', 'answer': 'world'})}\n\n",
+                f"data: {json.dumps({'type': 'source', 'source': [{'title': 'doc1'}]})}\n\n",
+                f"data: {json.dumps({'type': 'id', 'id': conv_id})}\n\n",
+                f"data: {json.dumps({'type': 'end'})}\n\n",
             ]
 
             result = resource.process_response_stream(iter(stream))
@@ -508,7 +496,7 @@ class TestProcessResponseStream:
             resource = BaseAnswerResource()
 
             stream = [
-                f'data: {json.dumps({"type": "error", "error": "Test error"})}\n\n',
+                f"data: {json.dumps({'type': 'error', 'error': 'Test error'})}\n\n",
             ]
 
             result = resource.process_response_stream(iter(stream))
