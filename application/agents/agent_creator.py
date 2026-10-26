@@ -3,7 +3,9 @@ from application.agents.react_agent import ReActAgent
 
 
 class AgentCreator:
-    agents = {
+    from typing import ClassVar
+
+    agents: ClassVar[dict] = {
         "classic": ClassicAgent,
         "react": ReActAgent,
     }

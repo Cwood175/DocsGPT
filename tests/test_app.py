@@ -6,7 +6,6 @@ from application.api.user.routes import user
 from application.core.settings import settings
 
 
-
 def test_app_config():
     app = Flask(__name__)
     app.register_blueprint(user)

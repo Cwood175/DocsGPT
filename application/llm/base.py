@@ -2,7 +2,6 @@ import logging
 from abc import ABC, abstractmethod
 
 from application.cache import gen_cache, stream_cache
-
 from application.core.settings import settings
 from application.usage import gen_token_usage, stream_token_usage
 
@@ -24,11 +23,7 @@ class BaseLLM(ABC):
     @property
     def fallback_llm(self):
         """Lazy-loaded fallback LLM instance."""
-        if (
-            self._fallback_llm is None
-            and self.fallback_provider
-            and self.fallback_model_name
-        ):
+        if self._fallback_llm is None and self.fallback_provider and self.fallback_model_name:
             try:
                 from application.llm.llm_creator import LLMCreator
 
@@ -39,14 +34,10 @@ class BaseLLM(ABC):
                     self.decoded_token,
                 )
             except Exception as e:
-                logger.error(
-                    f"Failed to initialize fallback LLM: {str(e)}", exc_info=True
-                )
+                logger.exception(f"Failed to initialize fallback LLM: {e!s}")
         return self._fallback_llm
 
-    def _execute_with_fallback(
-        self, method_name: str, decorators: list, *args, **kwargs
-    ):
+    def _execute_with_fallback(self, method_name: str, decorators: list, *args, **kwargs):
         """
         Unified method execution with fallback support.
 
@@ -67,15 +58,11 @@ class BaseLLM(ABC):
             return decorated_method()
         except Exception as e:
             if not self.fallback_llm:
-                logger.error(f"Primary LLM failed and no fallback available: {str(e)}")
+                logger.error(f"Primary LLM failed and no fallback available: {e!s}")
                 raise
-            logger.warning(
-                f"Falling back to {self.fallback_provider}/{self.fallback_model_name}. Error: {str(e)}"
-            )
+            logger.warning(f"Falling back to {self.fallback_provider}/{self.fallback_model_name}. Error: {e!s}")
 
-            fallback_method = getattr(
-                self.fallback_llm, method_name.replace("_raw_", "")
-            )
+            fallback_method = getattr(self.fallback_llm, method_name.replace("_raw_", ""))
             return fallback_method(*args, **kwargs)
 
     def gen(self, model, messages, stream=False, tools=None, *args, **kwargs):
@@ -83,11 +70,11 @@ class BaseLLM(ABC):
         return self._execute_with_fallback(
             "_raw_gen",
             decorators,
+            *args,
             model=model,
             messages=messages,
             stream=stream,
             tools=tools,
-            *args,
             **kwargs,
         )
 
@@ -96,11 +83,11 @@ class BaseLLM(ABC):
         return self._execute_with_fallback(
             "_raw_gen_stream",
             decorators,
+            *args,
             model=model,
             messages=messages,
             stream=stream,
             tools=tools,
-            *args,
             **kwargs,
         )
 
@@ -113,18 +100,14 @@ class BaseLLM(ABC):
         pass
 
     def supports_tools(self):
-        return hasattr(self, "_supports_tools") and callable(
-            getattr(self, "_supports_tools")
-        )
+        return hasattr(self, "_supports_tools") and callable(self._supports_tools)
 
     def _supports_tools(self):
         raise NotImplementedError("Subclass must implement _supports_tools method")
 
     def supports_structured_output(self):
         """Check if the LLM supports structured output/JSON schema enforcement"""
-        return hasattr(self, "_supports_structured_output") and callable(
-            getattr(self, "_supports_structured_output")
-        )
+        return hasattr(self, "_supports_structured_output") and callable(self._supports_structured_output)
 
     def _supports_structured_output(self):
         return False
@@ -132,7 +115,6 @@ class BaseLLM(ABC):
     def prepare_structured_output_format(self, json_schema):
         """Prepare structured output format specific to the LLM provider"""
         _ = json_schema
-        return None
 
     def get_supported_attachment_types(self):
         """

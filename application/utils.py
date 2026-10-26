@@ -9,7 +9,6 @@ from werkzeug.utils import secure_filename
 
 from application.core.settings import settings
 
-
 _encoding = None
 
 
@@ -51,7 +50,7 @@ def safe_filename(filename):
     # If secure_filename returns just the extension or an empty string
 
     if not safe_name or safe_name == extension.lstrip("."):
-        return f"{str(uuid.uuid4())}{extension}"
+        return f"{uuid.uuid4()}{extension}"
     return safe_name
 
 
@@ -113,9 +112,7 @@ def validate_required_fields(data, required_fields):
     if empty_fields:
         errors.append(f"Empty values in required fields: {', '.join(empty_fields)}")
     if errors:
-        return make_response(
-            jsonify({"success": False, "message": " | ".join(errors)}), 400
-        )
+        return make_response(jsonify({"success": False, "message": " | ".join(errors)}), 400)
     return None
 
 
@@ -132,9 +129,7 @@ def limit_chat_history(history, max_token_limit=None, gpt_model="docsgpt"):
 
     max_token_limit = (
         max_token_limit
-        if max_token_limit
-        and max_token_limit
-        < settings.LLM_TOKEN_LIMITS.get(gpt_model, settings.DEFAULT_MAX_HISTORY)
+        if max_token_limit and max_token_limit < settings.LLM_TOKEN_LIMITS.get(gpt_model, settings.DEFAULT_MAX_HISTORY)
         else settings.LLM_TOKEN_LIMITS.get(gpt_model, settings.DEFAULT_MAX_HISTORY)
     )
 
@@ -162,9 +157,7 @@ def limit_chat_history(history, max_token_limit=None, gpt_model="docsgpt"):
 
 def validate_function_name(function_name):
     """Validates if a function name matches the allowed pattern."""
-    if not re.match(r"^[a-zA-Z0-9_-]+$", function_name):
-        return False
-    return True
+    return bool(re.match(r"^[a-zA-Z0-9_-]+$", function_name))
 
 
 def generate_image_url(image_path):

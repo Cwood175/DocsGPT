@@ -1,13 +1,13 @@
+import io
 import os
 import tempfile
-import io
 
 from langchain_community.vectorstores import FAISS
 
 from application.core.settings import settings
 from application.parser.schema.base import Document
-from application.vectorstore.base import BaseVectorStore
 from application.storage.storage_creator import StorageCreator
+from application.vectorstore.base import BaseVectorStore
 
 
 def get_vectorstore(path: str) -> str:
@@ -20,6 +20,9 @@ def get_vectorstore(path: str) -> str:
 
 class FaissStore(BaseVectorStore):
     def __init__(self, source_id: str, embeddings_key: str, docs_init=None):
+        class FaissStoreError(Exception):
+            pass
+
         super().__init__()
         self.source_id = source_id
         self.path = get_vectorstore(source_id)
@@ -34,12 +37,8 @@ class FaissStore(BaseVectorStore):
                     faiss_path = f"{self.path}/index.faiss"
                     pkl_path = f"{self.path}/index.pkl"
 
-                    if not self.storage.file_exists(
-                        faiss_path
-                    ) or not self.storage.file_exists(pkl_path):
-                        raise FileNotFoundError(
-                            f"Index files not found in storage at {self.path}"
-                        )
+                    if not self.storage.file_exists(faiss_path) or not self.storage.file_exists(pkl_path):
+                        raise FileNotFoundError(f"Index files not found in storage at {self.path}")
 
                     faiss_file = self.storage.get_file(faiss_path)
                     pkl_file = self.storage.get_file(pkl_path)
@@ -53,11 +52,9 @@ class FaissStore(BaseVectorStore):
                     with open(local_pkl_path, "wb") as f:
                         f.write(pkl_file.read())
 
-                    self.docsearch = FAISS.load_local(
-                        temp_dir, self.embeddings, allow_dangerous_deserialization=True
-                    )
-        except Exception as e:
-            raise Exception(f"Error loading FAISS index: {str(e)}")
+                    self.docsearch = FAISS.load_local(temp_dir, self.embeddings, allow_dangerous_deserialization=True)
+        except (OSError, ValueError, RuntimeError, TypeError, AttributeError) as e:
+            raise FaissStoreError(f"Error loading FAISS index: {e!s}") from e
 
         self.assert_embedding_dimensions(self.embeddings)
 
@@ -104,15 +101,10 @@ class FaissStore(BaseVectorStore):
 
     def assert_embedding_dimensions(self, embeddings):
         """Check that the word embedding dimension of the docsearch index matches the dimension of the word embeddings used."""
-        if (
-            settings.EMBEDDINGS_NAME
-            == "huggingface_sentence-transformers/all-mpnet-base-v2"
-        ):
+        if settings.EMBEDDINGS_NAME == "huggingface_sentence-transformers/all-mpnet-base-v2":
             word_embedding_dimension = getattr(embeddings, "dimension", None)
             if word_embedding_dimension is None:
-                raise AttributeError(
-                    "'dimension' attribute not found in embeddings instance."
-                )
+                raise AttributeError("'dimension' attribute not found in embeddings instance.")
 
             docsearch_index_dimension = self.docsearch.index.d
             if word_embedding_dimension != docsearch_index_dimension:
@@ -139,8 +131,6 @@ class FaissStore(BaseVectorStore):
         doc_id = self.docsearch.add_documents([doc])
         self._save_to_storage()
         return doc_id
-
-
 
     def delete_chunk(self, chunk_id):
         """Delete a chunk and save to storage."""
