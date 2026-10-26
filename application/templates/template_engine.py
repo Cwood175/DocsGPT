@@ -1,22 +1,20 @@
 import logging
-from typing import Any, Dict, List, Optional, Set
+from typing import Any
 
 from jinja2 import (
-    Environment,
-    select_autoescape,
     ChainableUndefined,
+    Environment,
     TemplateSyntaxError,
+    nodes,
+    select_autoescape,
 )
 from jinja2.exceptions import UndefinedError
-from jinja2 import nodes
 
 logger = logging.getLogger(__name__)
 
 
 class TemplateRenderError(Exception):
     """Raised when template rendering fails"""
-
-    pass
 
 
 class TemplateEngine:
@@ -30,7 +28,7 @@ class TemplateEngine:
             autoescape=select_autoescape(default_for_string=True, default=True),
         )
 
-    def render(self, template_content: str, context: Dict[str, Any]) -> str:
+    def render(self, template_content: str, context: dict[str, Any]) -> str:
         """
         Render template with provided context.
 
@@ -58,7 +56,7 @@ class TemplateEngine:
             logger.error(error_msg)
             raise TemplateRenderError(error_msg) from e
         except Exception as e:
-            error_msg = f"Template rendering failed: {str(e)}"
+            error_msg = f"Template rendering failed: {e!s}"
             logger.error(error_msg)
             raise TemplateRenderError(error_msg) from e
 
@@ -80,7 +78,7 @@ class TemplateEngine:
         except TemplateSyntaxError:
             return False
 
-    def extract_variables(self, template_content: str) -> Set[str]:
+    def extract_variables(self, template_content: str) -> set[str]:
         """
         Extract all variable names from template.
 
@@ -95,12 +93,10 @@ class TemplateEngine:
         try:
             ast = self._env.parse(template_content)
             return set(self._env.get_template_module(ast).make_module().keys())
-        except Exception:
+        except Exception:  # noqa: BLE001
             return set()
 
-    def extract_tool_usages(
-        self, template_content: str
-    ) -> Dict[str, Set[Optional[str]]]:
+    def extract_tool_usages(self, template_content: str) -> dict[str, set[str | None]]:
         """
         Extract tool and action references from a template.
 
@@ -113,19 +109,15 @@ class TemplateEngine:
         try:
             ast = self._env.parse(template_content)
         except TemplateSyntaxError as e:
-            logger.warning(
-                f"extract_tool_usages: unable to parse template (line {e.lineno}): {e.message}"
-            )
+            logger.warning(f"extract_tool_usages: unable to parse template (line {e.lineno}): {e.message}")
             return {}
-        except Exception as e:
-            logger.warning(
-                f"extract_tool_usages: unexpected error while parsing template: {str(e)}"
-            )
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"extract_tool_usages: unexpected error while parsing template: {e!s}")
             return {}
 
-        usages: Dict[str, Set[Optional[str]]] = {}
+        usages: dict[str, set[str | None]] = {}
 
-        def record(path: List[str]) -> None:
+        def record(path: list[str]) -> None:
             if not path:
                 return
             tool_name = path[0]
